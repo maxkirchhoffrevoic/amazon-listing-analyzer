@@ -1,66 +1,43 @@
 import streamlit as st
 import pandas as pd
-from io import BytesIO
+import re
 
-st.set_page_config(page_title="Amazon Listing Analyzer", layout="wide")
+st.set_page_config(page_title="Amazon Listing Visualizer", layout="wide")
 
-st.title("📊 Amazon Listing Analyzer")
-st.markdown("Lade deine **Content-Datei** und **Keyword-Liste** hoch, um automatisch Zeichenanzahl, Byteanzahl und Keyword-Abdeckung zu analysieren.")
+st.title("🖍️ Amazon Listing Visualizer mit Keyword-Highlighting")
+st.markdown("Lade eine Excel-Datei hoch mit Amazon-Content und Keywords in **einer Datei**.")
 
-# ==== Upload-Bereich ====
-content_file = st.file_uploader("🔠 Content Excel (Titel, Bullets, Description, Search Terms)", type=["xlsx"])
-keyword_file = st.file_uploader("🔑 Keyword Excel (eine Spalte)", type=["xlsx"])
+# Datei-Upload
+uploaded_file = st.file_uploader("📁 Excel-Datei hochladen", type=["xlsx"])
 
-if content_file and keyword_file:
-    content_df = pd.read_excel(content_file)
-    keywords_df = pd.read_excel(keyword_file)
-
-    if not keywords_df.empty:
-        st.success("Dateien erfolgreich geladen. Analyse läuft...")
-
-        # Keywordliste bereinigen
-        keywords = keywords_df.iloc[:, 0].dropna().astype(str).str.lower().tolist()
-
-        result_df = content_df.copy()
-
-        for col in content_df.columns:
-            result_df[col] = result_df[col].fillna("").astype(str)
-
-            result_df[f'{col}_CharCount'] = result_df[col].apply(len)
-            result_df[f'{col}_ByteCount'] = result_df[col].apply(lambda x: len(x.encode('utf-8')))
-
-            def match_keywords(text):
-                text_lower = text.lower()
-                matched = [kw for kw in keywords if kw in text_lower]
-                return ", ".join(matched)
-
-            result_df[f'{col}_MatchedKeywords'] = result_df[col].apply(match_keywords)
-
-        st.subheader("📋 Vorschau der Ergebnisse")
-        st.dataframe(result_df, use_container_width=True)
-
-        # ==== Download vorbereiten ====
-        def to_excel(df):
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df.to_excel(writer, index=False, sheet_name='Analyse')
-                workbook = writer.book
-                worksheet = writer.sheets['Analyse']
-                for i, col in enumerate(df.columns):
-                    column_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
-                    worksheet.set_column(i, i, column_len)
-            output.seek(0)
-            return output
-
-        excel_data = to_excel(result_df)
-
-        st.download_button(
-            label="📥 Ergebnis als Excel herunterladen",
-            data=excel_data,
-            file_name="Amazon_Content_Analyse.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
+    
+    # Sicherstellen, dass Spalten korrekt benannt sind
+    expected_columns = ['Titel', 'Bullet1', 'Bullet2', 'Bullet3', 'Bullet4', 'Bullet5', 'Description', 'SearchTerms', 'Keywords']
+    if not all(col in df.columns for col in expected_columns):
+        st.error("❌ Die Datei muss folgende Spalten enthalten: " + ", ".join(expected_columns))
     else:
-        st.warning("Die Keyword-Datei scheint leer zu sein.")
-else:
-    st.info("Bitte lade beide Dateien hoch, um fortzufahren.")
+        def highlight_keywords(text, keywords):
+            if not isinstance(text, str):
+                return "", 0
+            byte_count = len(text.encode("utf-8"))
+            for kw in sorted(keywords, key=len, reverse=True):
+                kw_escaped = re.escape(kw)
+                pattern = re.compile(f"(?i)({kw_escaped})")
+                text = pattern.sub(r'<span style="background-color:#ffeb3b">\1</span>', text)
+            return text, byte_count
+
+        for idx, row in df.iterrows():
+            st.markdown(f"## 📝 Listing {idx + 1}")
+
+            keywords = str(row['Keywords']).lower().split(",")
+            keywords = [kw.strip() for kw in keywords if kw.strip()]
+
+            for section in ['Titel', 'Bullet1', 'Bullet2', 'Bullet3', 'Bullet4', 'Bullet5', 'Description', 'SearchTerms']:
+                raw_text = row.get(section, "")
+                highlighted, byte_len = highlight_keywords(str(raw_text), keywords)
+
+                st.markdown(f"**{section}** ({byte_len} Bytes):", unsafe_allow_html=True)
+                st.markdown(f"<div style='border:1px solid #ccc; padding:10px; border-radius:5px'>{highlighted}</div>", unsafe_allow_html=True)
+                st.markdown("---")
