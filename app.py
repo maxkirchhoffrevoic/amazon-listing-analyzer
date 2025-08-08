@@ -22,6 +22,35 @@ def byte_length(text):
 
 # Excel-Datei hochladen
 uploaded_file = st.file_uploader("📤 Excel-Datei mit Listings hochladen", type=["xlsx"])
+
+# Zusätzlicher Import: Nur-Keyword-Excel hochladen
+st.markdown("---")
+st.subheader("🔁 Optional: Nur Keyword-Liste importieren")
+keywords_only_file = st.file_uploader("📄 Excel mit reinen Keyword-Zeilen hochladen", type=["xlsx"], key="keywords_only")
+if keywords_only_file:
+    try:
+        keyword_df = pd.read_excel(keywords_only_file)
+        keyword_column = keyword_df.columns[0]
+        updated_rows = []
+        for i, row in keyword_df.iterrows():
+            kw_list = str(row[keyword_column])
+            updated_rows.append({
+                "Titel": "",
+                "Bullet1": "",
+                "Bullet2": "",
+                "Bullet3": "",
+                "Bullet4": "",
+                "Bullet5": "",
+                "Description": "",
+                "SearchTerms": "",
+                "Keywords": kw_list
+            })
+        df = pd.DataFrame(updated_rows)
+        st.success("Keywords erfolgreich importiert. Die Content-Felder sind leer.")
+    except Exception as e:
+        st.error(f"Fehler beim Lesen der Keyword-Datei: {e}")
+
+
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
     updated_rows = []
