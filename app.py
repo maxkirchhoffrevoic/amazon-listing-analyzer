@@ -6,7 +6,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="Amazon Listing Editor", layout="wide")
 
-st.title("🛠️ Amazon Listing Editor mit Keyword-Highlighting & Byte-Warnung")
+st.title("🛠️ Amazon Listing Editor mit Byte-Warnung, Keyword-Highlighting & Editierfunktion")
 
 uploaded_file = st.file_uploader("📁 Excel-Datei hochladen", type=["xlsx"])
 
@@ -17,71 +17,77 @@ if uploaded_file:
     if not all(col in df.columns for col in expected_columns):
         st.error("❌ Die Datei muss folgende Spalten enthalten: " + ", ".join(expected_columns))
     else:
-        # Sidebar: Keywordliste
         st.sidebar.header("🔑 Keyword-Liste")
 
+        limits = {
+            'Titel': 150,
+            'Bullet1': 200, 'Bullet2': 200, 'Bullet3': 200,
+            'Bullet4': 200, 'Bullet5': 200,
+            'Description': 2000,
+            'SearchTerms': 250
+        }
+
         for idx, row in df.iterrows():
-            st.markdown(f"## 📝 Listing {idx + 1}")
-            st.sidebar.markdown(f"### Listing {idx + 1}")
+            with st.expander(f"📝 Listing {idx + 1}", expanded=False):
+                st.sidebar.markdown(f"### Listing {idx + 1}")
 
-            raw_keywords = str(row['Keywords'])
-            keywords = [kw.strip() for kw in raw_keywords.lower().split(",") if kw.strip()]
-            used_keywords = set()
+                raw_keywords = str(row['Keywords'])
+                keywords = [kw.strip() for kw in raw_keywords.lower().split(",") if kw.strip()]
+                used_keywords = set()
 
-            def highlight_keywords(text, keywords):
-                if not isinstance(text, str):
-                    return text, 0, set()
-                byte_count = len(text.encode("utf-8"))
-                found = set()
+                def highlight_keywords(text, keywords):
+                    if not isinstance(text, str):
+                        return text, 0, set()
+                    byte_count = len(text.encode("utf-8"))
+                    found = set()
 
-                # Funktion zum Ersetzen
-                def replacer(match):
-                    kw = match.group(0)
-                    found.add(kw.lower())
-                    return f'<span style="background-color:#ffeb3b">{kw}</span>'
+                    def replacer(match):
+                        kw = match.group(0)
+                        found.add(kw.lower())
+                        return f'<span style="background-color:#ffeb3b">{kw}</span>'
 
-                for kw in sorted(keywords, key=len, reverse=True):
-                    pattern = re.compile(rf'(?i)\b{re.escape(kw)}\b')
-                    text = pattern.sub(replacer, text)
-                return text, byte_count, found
+                    for kw in sorted(keywords, key=len, reverse=True):
+                        pattern = re.compile(rf'(?i)\b{re.escape(kw)}\b')
+                        text = pattern.sub(replacer, text)
+                    return text, byte_count, found
 
-            def byte_limit(section, byte_len):
-                limits = {
-                    'Titel': 150,
-                    'Bullet1': 200, 'Bullet2': 200, 'Bullet3': 200,
-                    'Bullet4': 200, 'Bullet5': 200,
-                    'Description': 2000,
-                    'SearchTerms': 250
-                }
-                return byte_len > limits.get(section, 9999)
+                new_row = {}
+                for section in ['Titel', 'Bullet1', 'Bullet2', 'Bullet3', 'Bullet4', 'Bullet5', 'Description', 'SearchTerms']:
+                    content = row.get(section, "")
+                    byte_limit = limits.get(section, 9999)
+                    edited = st.text_area(
+                        f"{section} (Max: {byte_limit} Bytes)",
+                        value=content,
+                        key=f"{section}_{idx}",
+                        help=f"Maximale Byteanzahl: {byte_limit}"
+                    )
+                    new_row[section] = edited
 
-            new_row = {}
-            for section in ['Titel', 'Bullet1', 'Bullet2', 'Bullet3', 'Bullet4', 'Bullet5', 'Description', 'SearchTerms']:
-                content = row.get(section, "")
-                edited = st.text_area(f"{section}", value=content, key=f"{section}_{idx}")
-                new_row[section] = edited
+                    # Echtzeit-Byte-Anzeige
+                    current_bytes = len(edited.encode('utf-8'))
+                    over_limit = current_bytes > byte_limit
+                    color = "red" if over_limit else "black"
+                    st.markdown(f"<span style='color:{color}'>Aktuelle Bytes: {current_bytes} / {byte_limit}</span>", unsafe_allow_html=True)
 
-                highlighted, byte_len, found_kw = highlight_keywords(edited, keywords)
-                used_keywords.update(found_kw)
+                    # Vorschau mit Keyword-Highlighting
+                    highlighted, byte_len, found_kw = highlight_keywords(edited, keywords)
+                    used_keywords.update(found_kw)
 
-                over_limit = byte_limit(section, byte_len)
-                header_color = "red" if over_limit else "black"
-                st.markdown(f"<div style='color:{header_color}; font-weight:bold'>{section} ({byte_len} Bytes)</div>", unsafe_allow_html=True)
-                st.markdown(f"<div style='border:1px solid #ccc; padding:10px; border-radius:5px'>{highlighted}</div>", unsafe_allow_html=True)
-                st.markdown("---")
+                    st.markdown(f"<div style='border:1px solid #ccc; padding:10px; border-radius:5px'>{highlighted}</div>", unsafe_allow_html=True)
+                    st.markdown("---")
 
-            # Seitenleiste – Keywordliste mit Markierung
-            highlighted_keywords = []
-            for kw in keywords:
-                if kw in used_keywords:
-                    highlighted_keywords.append(f"<span style='background-color:#c8e6c9'>{kw}</span>")
-                else:
-                    highlighted_keywords.append(f"<span>{kw}</span>")
-            st.sidebar.markdown("<br>".join(highlighted_keywords), unsafe_allow_html=True)
+                # Sidebar Keywordliste mit Markierung
+                highlighted_keywords = []
+                for kw in keywords:
+                    if kw in used_keywords:
+                        highlighted_keywords.append(f"<span style='background-color:#c8e6c9'>{kw}</span>")
+                    else:
+                        highlighted_keywords.append(f"<span>{kw}</span>")
+                st.sidebar.markdown("<br>".join(highlighted_keywords), unsafe_allow_html=True)
 
-            # Update DataFrame
-            for key in new_row:
-                df.at[idx, key] = new_row[key]
+                # Update DataFrame
+                for key in new_row:
+                    df.at[idx, key] = new_row[key]
 
         # Download überarbeitetes Excel
         def convert_df_to_excel(df):
