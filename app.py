@@ -69,15 +69,7 @@ if uploaded_file:
     st.markdown("---")
     st.header("📥 Download aktualisierte Listings")
     result_df = pd.DataFrame(updated_rows)
-
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-    result_df.to_excel(writer, index=False)
-    output.seek(0)
-
-st.download_button(
-        label="📥 Excel herunterladen",
-    data=output,
-    file_name="updated_listings.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    output = result_df.to_excel(index=False, engine="openpyxl")
+    b64 = base64.b64encode(output).decode()
+    href = f'<a href="data:application/octet-stream;base64,{b64}" download="updated_listings.xlsx">📥 Download Excel-Datei</a>'
+    st.markdown(href, unsafe_allow_html=True)
