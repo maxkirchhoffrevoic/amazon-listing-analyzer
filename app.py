@@ -33,6 +33,8 @@ if uploaded_file:
                 keyword_list = [k.strip().lower() for k in kw_text.split(",") if k.strip()]
 
             with col2:
+        st.markdown("""<style>.block-container {padding-right: 2rem !important;} .listing-container {width: 100%; max-width: 1000px;}</style>""", unsafe_allow_html=True)
+        container_class = "listing-container"
                 for field, limit in {
                     "Titel": 150, 
                     "Bullet1": 200, 
