@@ -66,10 +66,12 @@ if uploaded_file:
                 updated_rows.append(listing_data)
 
     # Neue Excel-Datei zum Download
-    st.markdown("---")
-    st.header("📥 Download aktualisierte Listings")
-    result_df = pd.DataFrame(updated_rows)
-    output = result_df.to_excel(index=False, engine="openpyxl")
-    b64 = base64.b64encode(output).decode()
-    href = f'<a href="data:application/octet-stream;base64,{b64}" download="updated_listings.xlsx">📥 Download Excel-Datei</a>'
-    st.markdown(href, unsafe_allow_html=True)
+    st.markdown("### 📥 Download aktualisierte Listings")
+    result_df = pd.DataFrame([{
+        "Keywords": ", ".join(l["keywords"]),
+        **{f: st.session_state.get(f"{f}_{i}", "") for f in ["Titel", "Bullet1", "Bullet2", "Bullet3"]}
+    } for i, l in enumerate(st.session_state.listings)])
+
+    output = BytesIO()
+    result_df.to_excel(output, index=False, engine='openpyxl')
+    st.download_button("📥 Excel herunterladen", data=output.getvalue(), file_name="aktualisierte_listings.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
