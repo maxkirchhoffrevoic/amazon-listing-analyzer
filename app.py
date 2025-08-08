@@ -55,7 +55,8 @@ if keywords_only_file:
 
 if uploaded_file:
     from io import BytesIO
-        df = pd.read_excel(BytesIO(uploaded_file.read()))
+    from io import BytesIO
+    df = pd.read_excel(BytesIO(uploaded_file.read()))
     updated_rows = []
 
     # Durch alle Listings iterieren
