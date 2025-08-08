@@ -30,7 +30,7 @@ st.subheader("🔁 Optional: Nur Keyword-Liste importieren")
 keywords_only_file = st.file_uploader("📄 Excel mit reinen Keyword-Zeilen hochladen", type=["xlsx"], key="keywords_only")
 if keywords_only_file:
     try:
-    from io import BytesIO
+from io import BytesIO
         keyword_df = pd.read_excel(BytesIO(keywords_only_file.read()))
         keyword_column = keyword_df.columns[0]
         updated_rows = []
@@ -55,8 +55,8 @@ if keywords_only_file:
 
 
 if uploaded_file:
-    from io import BytesIO
-    from io import BytesIO
+from io import BytesIO
+from io import BytesIO
     df = pd.read_excel(BytesIO(uploaded_file.read()))
     updated_rows = []
 
@@ -111,7 +111,7 @@ if uploaded_file:
     st.markdown("---")
     st.header("📥 Download aktualisierte Listings")
     result_df = pd.DataFrame(updated_rows)
-    from io import BytesIO
+from io import BytesIO
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         result_df.to_excel(writer, index=False)
