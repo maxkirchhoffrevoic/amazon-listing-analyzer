@@ -33,7 +33,7 @@ if keywords_only_file:
     try:
         keyword_df = pd.read_excel(BytesIO(keywords_only_file.read()))
         keyword_column = keyword_df.columns[0]
-        updated_rows = []
+    updated_rows = []
         for i, row in keyword_df.iterrows():
             kw_list = str(row[keyword_column])
             updated_rows.append({
