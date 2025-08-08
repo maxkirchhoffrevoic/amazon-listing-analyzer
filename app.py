@@ -23,6 +23,7 @@ def byte_length(text):
 # Excel-Datei hochladen
 uploaded_file = st.file_uploader("📤 Excel-Datei mit Listings hochladen", type=["xlsx"])
 
+
 # Zusätzlicher Import: Nur-Keyword-Excel hochladen
 st.markdown("---")
 st.subheader("🔁 Optional: Nur Keyword-Liste importieren")
@@ -46,6 +47,7 @@ if keywords_only_file:
                 "Keywords": kw_list
             })
         df = pd.DataFrame(updated_rows)
+        uploaded_file = True  # Trick: wir setzen die Haupt-Maske darunter in Gang
         st.success("Keywords erfolgreich importiert. Die Content-Felder sind leer.")
     except Exception as e:
         st.error(f"Fehler beim Lesen der Keyword-Datei: {e}")
