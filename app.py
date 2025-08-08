@@ -35,14 +35,11 @@ if uploaded_file:
                 st.markdown(f"### ✏️ Keywords für Listing {i+1}")
                 keywords_raw = st.text_area("Keywords (durch Komma getrennt)", row.get("Keywords", ""), key=f"kw_input_{i}")
                 keywords = [kw.strip() for kw in keywords_raw.split(",") if kw.strip()]
-                
                 highlighted_list = []
-                all_content = " ".join(str(listing_data.get(field, "")) for field in ["Titel", "Bullet1", "Bullet2", "Bullet3", "Bullet4", "Bullet5", "Description", "SearchTerms"])
                 for kw in keywords:
-                    color = "#d4edda" if re.search(rf"\b{re.escape(kw)}\b", all_content, re.IGNORECASE) else "transparent"
+                    color = "#d4edda" if any(re.search(rf"\b{re.escape(kw)}\b", str(row.get(field, "")), re.IGNORECASE) for field in ["Titel", "Bullet1", "Bullet2", "Bullet3", "Bullet4", "Bullet5", "Description", "SearchTerms"]) else "transparent"
                     highlighted_list.append(f"<span style='background-color:{color}; padding:2px 4px; border-radius:4px; display:inline-block; margin:2px'>{kw}</span>")
                 st.markdown(" ".join(highlighted_list), unsafe_allow_html=True)
-
 
             with col2:
                 st.markdown("<style>.field-label { font-weight: bold; margin-top: 1rem; }</style>", unsafe_allow_html=True)
