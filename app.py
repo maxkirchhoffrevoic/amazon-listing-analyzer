@@ -72,13 +72,12 @@ if uploaded_file:
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        result_df.to_excel(writer, index=False)
+    result_df.to_excel(writer, index=False)
     output.seek(0)
 
-        st.download_button(
+st.download_button(
         label="📥 Excel herunterladen",
     data=output,
     file_name="updated_listings.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
