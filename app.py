@@ -37,7 +37,7 @@ if uploaded_file:
                 keywords = [kw.strip() for kw in keywords_raw.split(",") if kw.strip()]
                 highlighted_list = []
                 for kw in keywords:
-                    color = "#d4edda" if any(re.search(rf"\b{re.escape(kw)}\b", str(row.get(field, "")), re.IGNORECASE) for field in ["Title", "Bullet1", "Bullet2", "Bullet3", "Bullet4", "Bullet5", "Description", "Search Terms"]) else "transparent"
+                    color = "#d4edda" if any(re.search(rf"\b{re.escape(kw)}\b", str(row.get(field, "")), re.IGNORECASE) for field in ["Titel", "Bullet1", "Bullet2", "Bullet3", "Bullet4", "Bullet5", "Description", "SearchTerms"]) else "transparent"
                     highlighted_list.append(f"<span style='background-color:{color}; padding:2px 4px; border-radius:4px; display:inline-block; margin:2px'>{kw}</span>")
                 st.markdown(" ".join(highlighted_list), unsafe_allow_html=True)
 
@@ -45,14 +45,14 @@ if uploaded_file:
                 st.markdown("<style>.field-label { font-weight: bold; margin-top: 1rem; }</style>", unsafe_allow_html=True)
                 listing_data = {}
                 fields = {
-                    "Title": 150,
+                    "Titel": 150,
                     "Bullet1": 200,
                     "Bullet2": 200,
                     "Bullet3": 200,
                     "Bullet4": 200,
                     "Bullet5": 200,
                     "Description": 2000,
-                    "Search Terms": 250
+                    "SearchTerms": 250
                 }
                 for field, max_bytes in fields.items():
                     content = st.text_area(f"{field}", row.get(field, ""), key=f"{field}_{i}")
