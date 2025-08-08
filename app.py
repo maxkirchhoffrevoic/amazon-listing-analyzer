@@ -80,5 +80,5 @@ if uploaded_file:
     data=output,
     file_name="updated_listings.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+    )
 
