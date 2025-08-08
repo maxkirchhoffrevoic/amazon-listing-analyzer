@@ -68,18 +68,17 @@ if uploaded_file:
     # Neue Excel-Datei zum Download
     st.markdown("---")
     st.header("📥 Download aktualisierte Listings")
-   result_df = pd.DataFrame(updated_rows)
+    result_df = pd.DataFrame(updated_rows)
 
-# Excel in einen BytesIO-Puffer schreiben
-output = BytesIO()
-with pd.ExcelWriter(output, engine="openpyxl") as writer:
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
     result_df.to_excel(writer, index=False)
-output.seek(0)
+    output.seek(0)
 
-# Download-Button anzeigen
-st.download_button(
+    st.download_button(
     label="📥 Excel herunterladen",
     data=output,
     file_name="updated_listings.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
