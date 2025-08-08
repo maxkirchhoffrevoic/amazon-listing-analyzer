@@ -36,12 +36,7 @@ if uploaded_file:
                 keywords_raw = st.text_area("Keywords (durch Komma getrennt)", row.get("Keywords", ""), key=f"kw_input_{i}")
                 keywords = [kw.strip() for kw in keywords_raw.split(",") if kw.strip()]
                 
-                highlighted_list = []
-                all_content = " ".join(listing_data.get(field, "") for field in ["Titel", "Bullet1", "Bullet2", "Bullet3", "Bullet4", "Bullet5", "Description", "SearchTerms"])
-                for kw in keywords:
-                    color = "#d4edda" if re.search(rf"\b{re.escape(kw)}\b", all_content, re.IGNORECASE) else "transparent"
-                    highlighted_list.append(f"<span style='background-color:{color}; padding:2px 4px; border-radius:4px; display:inline-block; margin:2px'>{kw}</span>")
-                st.markdown(" ".join(highlighted_list), unsafe_allow_html=True)
+                
 
 
             with col2:
@@ -66,7 +61,17 @@ if uploaded_file:
                     st.markdown(f"<div style='padding: 0.5rem; border: 1px solid #eee;'>{preview}</div>", unsafe_allow_html=True)
                     listing_data[field] = content
                 listing_data["Keywords"] = keywords_raw
-                updated_rows.append(listing_data)
+                
+        # Dynamische Keyword-Highlighting-Liste
+        highlighted_list = []
+        all_content = " ".join(listing_data.get(field, "") for field in ["Titel", "Bullet1", "Bullet2", "Bullet3", "Bullet4", "Bullet5", "Description", "SearchTerms"])
+        for kw in keywords:
+            color = "#d4edda" if re.search(rf"\b{re.escape(kw)}\b", all_content, re.IGNORECASE) else "transparent"
+            highlighted_list.append(f"<span style='background-color:{color}; padding:2px 4px; border-radius:4px; display:inline-block; margin:2px'>{kw}</span>")
+        with col1:
+            st.markdown(" ".join(highlighted_list), unsafe_allow_html=True)
+
+        updated_rows.append(listing_data)
 
     # Neue Excel-Datei zum Download
     st.markdown("---")
