@@ -1,39 +1,97 @@
 
 import streamlit as st
+import pandas as pd
 import streamlit.components.v1 as components
+import base64
 
-st.set_page_config(page_title="Amazon Listing Editor – Custom WYSIWYG", layout="wide")
-st.title("🛠️ Amazon Listing Editor mit echtem WYSIWYG-Highlighting (Custom JS-Komponente)")
+st.set_page_config(page_title="Amazon Listing WYSIWYG Editor", layout="wide")
+st.title("🧰 Amazon Listing Editor mit WYSIWYG, Keyword-Highlighting & Byte-Zähler")
 
-st.markdown("Diese Version nutzt eine eingebettete benutzerdefinierte JavaScript-Komponente für echtes Inline-Keyword-Highlighting während der Bearbeitung.")
+# --- Helper: Byte count ---
+def count_bytes(text):
+    return len(text.encode("utf-8"))
 
-# Beispielhafte HTML-Komponente mit einfacher Textarea und Markierung
-custom_editor_html = """
-<div style="font-family: sans-serif;">
-  <label for="editor" style="font-weight: bold; font-size: 16px;">Titel (mit Keyword-Highlight)</label><br>
-  <textarea id="editor" rows="5" style="width:100%; padding:10px; font-size: 14px;" oninput="highlight()"></textarea>
-  <div id="preview" style="margin-top:10px; padding:10px; background:#f9f9f9; border:1px solid #ddd;"></div>
-</div>
+# --- Upload Excel ---
+uploaded_file = st.file_uploader("📤 Excel-Datei mit Listings hochladen", type=["xlsx"])
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
+    listings = df.to_dict(orient="records")
 
-<script>
-  const keywords = ["brotbox", "edelstahl", "bpa-frei", "kompakt"];
-  const colors = ["#fff176", "#ffab91", "#b9f6ca", "#b39ddb"];
+    export_data = []
 
-  function highlight() {
-    let input = document.getElementById("editor").value;
-    let result = input;
+    for idx, row in enumerate(listings):
+        with st.expander(f"📦 Listing {idx+1} – einklappen/ausklappen", expanded=False):
+            # Keyword-Panel links
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.markdown(f"#### ✏️ Keywords für Listing {idx+1}")
+                kw_text = st.text_area(
+                    f"Keywords (durch Komma getrennt)", 
+                    row.get("Keywords", ""), 
+                    key=f"kw_input_{idx}"
+                )
+                keyword_list = [k.strip().lower() for k in kw_text.split(",") if k.strip()]
 
-    keywords.forEach((kw, index) => {
-      const color = colors[index % colors.length];
-      const regex = new RegExp("(" + kw + ")", "gi");
-      result = result.replace(regex, "<mark style='background-color:" + color + "'>$1</mark>");
-    });
+            with col2:
+                for field, limit in {
+                    "Titel": 150, 
+                    "Bullet1": 200, 
+                    "Bullet2": 200, 
+                    "Bullet3": 200, 
+                    "Bullet4": 200, 
+                    "Bullet5": 200,
+                    "Description": 2000, 
+                    "SearchTerms": 250
+                }.items():
+                    orig_text = str(row.get(field, ""))
 
-    document.getElementById("preview").innerHTML = "<b>Live-Vorschau:</b><br>" + result;
-  }
+                    # HTML WYSIWYG Editor
+                    components.html(f"""
+                    <div style="margin-bottom:20px;">
+                        <label style="font-weight:bold; font-size:16px;">{field}</label><br>
+                        <textarea id="editor_{field}_{idx}" rows="4" style="width:100%; padding:8px; font-size:14px;" 
+                            oninput="highlight_{field}_{idx}()">{orig_text}</textarea>
+                        <div id="preview_{field}_{idx}" style="margin-top:5px; padding:10px; background:#f9f9f9; border:1px solid #ddd; font-family:sans-serif;"></div>
+                        <div id="bytes_{field}_{idx}" style="font-size:12px; color:#888; margin-top:2px;"></div>
+                    </div>
 
-  window.onload = highlight;
-</script>
-"""
+                    <script>
+                        const kw_{field}_{idx} = {keyword_list};
+                        const colors_{field}_{idx} = ["#fff176", "#ffab91", "#b9f6ca", "#b39ddb"];
 
-components.html(custom_editor_html, height=300)
+                        function highlight_{field}_{idx}() {{
+                            let inputElem = document.getElementById("editor_{field}_{idx}");
+                            let previewElem = document.getElementById("preview_{field}_{idx}");
+                            let bytesElem = document.getElementById("bytes_{field}_{idx}");
+                            let input = inputElem.value;
+                            let result = input;
+
+                            kw_{field}_{idx}.forEach((kw, i) => {{
+                                let regex = new RegExp("(" + kw + ")", "gi");
+                                let color = colors_{field}_{idx}[i % colors_{field}_{idx}.length];
+                                result = result.replace(regex, "<mark style='background-color:" + color + "'>$1</mark>");
+                            }});
+
+                            previewElem.innerHTML = result;
+                            let byteCount = new TextEncoder().encode(input).length;
+                            bytesElem.innerHTML = "Bytes: " + byteCount + " / {limit}";
+                            bytesElem.style.color = byteCount > {limit} ? "red" : "#888";
+                        }}
+                        window.onload = highlight_{field}_{idx};
+                    </script>
+                    """, height=220)
+
+                    export_data.append({
+                        "Listing": idx + 1,
+                        "Feld": field,
+                        "Text": orig_text
+                    })
+
+    # --- Export Excel ---
+    if st.button("📥 Geänderte Inhalte als Excel herunterladen"):
+        export_df = pd.DataFrame(export_data)
+        output = export_df.pivot(index="Listing", columns="Feld", values="Text").reset_index()
+        excel_file = output.to_excel(index=False, engine='openpyxl')
+        b64 = base64.b64encode(excel_file).decode()
+        href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="bearbeitetes_listing.xlsx">Download Excel-Datei</a>'
+        st.markdown(href, unsafe_allow_html=True)
