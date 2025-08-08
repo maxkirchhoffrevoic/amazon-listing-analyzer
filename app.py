@@ -6,7 +6,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="Amazon Listing Editor", layout="wide")
 
-st.title("🛠️ Amazon Listing Editor – Kompaktansicht mit Byteanzeige & Keywordkontrolle")
+st.title("🛠️ Amazon Listing Editor – Kompakt, live, editierbar")
 
 uploaded_file = st.file_uploader("📁 Excel-Datei hochladen", type=["xlsx"])
 
@@ -27,7 +27,7 @@ if uploaded_file:
 
         for idx, row in df.iterrows():
             with st.expander(f"📝 Listing {idx + 1}", expanded=False):
-                st.subheader(f"Listing {idx + 1}")
+                st.markdown(f"<h3 style='margin-bottom:0'>Listing {idx + 1}</h3>", unsafe_allow_html=True)
 
                 # KEYWORDS bearbeiten
                 with st.sidebar.expander(f"✏️ Keywords für Listing {idx + 1}", expanded=False):
@@ -44,11 +44,17 @@ if uploaded_file:
                     content = row.get(section, "")
                     byte_limit = limits.get(section, 9999)
 
+                    st.markdown(
+                        f"<div style='font-size:16px; font-weight:600; margin-top:1.5em; color:#1a1a1a'>{section}</div>",
+                        unsafe_allow_html=True
+                    )
+
                     edited = st.text_area(
                         f"{section} (Max: {byte_limit} Bytes)",
                         value=content,
                         key=f"{section}_{idx}",
-                        height=100
+                        height=100,
+                        label_visibility="collapsed"
                     )
                     df.at[idx, section] = edited
 
