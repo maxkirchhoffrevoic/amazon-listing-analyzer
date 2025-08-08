@@ -33,10 +33,15 @@ if uploaded_file:
                     return text, 0, []
                 byte_count = len(text.encode("utf-8"))
                 found = []
+
+                def replacer(match):
+                    kw = match.group(0)
+                    found.append(kw.lower())
+                    return f'<span style="background-color:#ffeb3b">{kw}</span>'
+
                 for kw in sorted(keywords, key=len, reverse=True):
-                    if kw in text.lower():
-                        found.append(kw)
-                        text = re.sub(f"(?i)({re.escape(kw)})", r'<span style="background-color:#ffeb3b"></span>', text)
+                    pattern = re.compile(f"(?i)\b({re.escape(kw)})\b")
+                    text = pattern.sub(replacer, text)
                 return text, byte_count, found
 
             def byte_limit(section, byte_len):
