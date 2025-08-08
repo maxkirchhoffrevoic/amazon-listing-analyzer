@@ -32,6 +32,8 @@ keywords_only_file = st.file_uploader("📄 Excel mit reinen Keyword-Zeilen hoch
 if keywords_only_file:
     try:
         keyword_df = pd.read_excel(BytesIO(keywords_only_file.read()))
+except Exception as e:
+    st.error(f"Fehler beim Lesen der Keyword-Datei: {e}")
         keyword_column = keyword_df.columns[0]
     updated_rows = []
         for i, row in keyword_df.iterrows():
