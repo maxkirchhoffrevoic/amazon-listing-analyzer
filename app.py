@@ -30,6 +30,7 @@ st.subheader("🔁 Optional: Nur Keyword-Liste importieren")
 keywords_only_file = st.file_uploader("📄 Excel mit reinen Keyword-Zeilen hochladen", type=["xlsx"], key="keywords_only")
 if keywords_only_file:
     try:
+    from io import BytesIO
         keyword_df = pd.read_excel(BytesIO(keywords_only_file.read()))
         keyword_column = keyword_df.columns[0]
         updated_rows = []
