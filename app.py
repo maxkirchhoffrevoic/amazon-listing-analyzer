@@ -30,7 +30,7 @@ st.subheader("🔁 Optional: Nur Keyword-Liste importieren")
 keywords_only_file = st.file_uploader("📄 Excel mit reinen Keyword-Zeilen hochladen", type=["xlsx"], key="keywords_only")
 if keywords_only_file:
     try:
-        keyword_df = pd.read_excel(keywords_only_file)
+        keyword_df = pd.read_excel(BytesIO(keywords_only_file.read()))
         keyword_column = keyword_df.columns[0]
         updated_rows = []
         for i, row in keyword_df.iterrows():
@@ -54,7 +54,8 @@ if keywords_only_file:
 
 
 if uploaded_file:
-    df = pd.read_excel(uploaded_file)
+    from io import BytesIO
+        df = pd.read_excel(BytesIO(uploaded_file.read()))
     updated_rows = []
 
     # Durch alle Listings iterieren
