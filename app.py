@@ -19,28 +19,29 @@ if uploaded_file:
     else:
         # Sidebar: Keywordliste
         st.sidebar.header("🔑 Keyword-Liste")
+
         for idx, row in df.iterrows():
             st.markdown(f"## 📝 Listing {idx + 1}")
             st.sidebar.markdown(f"### Listing {idx + 1}")
 
-            keywords = str(row['Keywords']).lower().split(",")
-            keywords = [kw.strip() for kw in keywords if kw.strip()]
-            used_keywords = []
+            raw_keywords = str(row['Keywords'])
+            keywords = [kw.strip() for kw in raw_keywords.lower().split(",") if kw.strip()]
+            used_keywords = set()
 
-            # Funktionen
             def highlight_keywords(text, keywords):
                 if not isinstance(text, str):
-                    return text, 0, []
+                    return text, 0, set()
                 byte_count = len(text.encode("utf-8"))
-                found = []
+                found = set()
 
+                # Funktion zum Ersetzen
                 def replacer(match):
                     kw = match.group(0)
-                    found.append(kw.lower())
+                    found.add(kw.lower())
                     return f'<span style="background-color:#ffeb3b">{kw}</span>'
 
                 for kw in sorted(keywords, key=len, reverse=True):
-                    pattern = re.compile(f"(?i)\b({re.escape(kw)})\b")
+                    pattern = re.compile(rf'(?i)\b{re.escape(kw)}\b')
                     text = pattern.sub(replacer, text)
                 return text, byte_count, found
 
@@ -52,10 +53,8 @@ if uploaded_file:
                     'Description': 2000,
                     'SearchTerms': 250
                 }
-                limit = limits.get(section, 9999)
-                return byte_len > limit
+                return byte_len > limits.get(section, 9999)
 
-            # Content-Bearbeitung
             new_row = {}
             for section in ['Titel', 'Bullet1', 'Bullet2', 'Bullet3', 'Bullet4', 'Bullet5', 'Description', 'SearchTerms']:
                 content = row.get(section, "")
@@ -63,7 +62,7 @@ if uploaded_file:
                 new_row[section] = edited
 
                 highlighted, byte_len, found_kw = highlight_keywords(edited, keywords)
-                used_keywords.extend(found_kw)
+                used_keywords.update(found_kw)
 
                 over_limit = byte_limit(section, byte_len)
                 header_color = "red" if over_limit else "black"
@@ -72,13 +71,13 @@ if uploaded_file:
                 st.markdown("---")
 
             # Seitenleiste – Keywordliste mit Markierung
-            displayed = []
+            highlighted_keywords = []
             for kw in keywords:
                 if kw in used_keywords:
-                    displayed.append(f"<span style='background-color:#c8e6c9'>{kw}</span>")
+                    highlighted_keywords.append(f"<span style='background-color:#c8e6c9'>{kw}</span>")
                 else:
-                    displayed.append(kw)
-            st.sidebar.markdown("<br>".join(displayed), unsafe_allow_html=True)
+                    highlighted_keywords.append(f"<span>{kw}</span>")
+            st.sidebar.markdown("<br>".join(highlighted_keywords), unsafe_allow_html=True)
 
             # Update DataFrame
             for key in new_row:
