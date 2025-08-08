@@ -6,7 +6,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="Amazon Listing Editor", layout="wide")
 
-st.title("🛠️ Amazon Listing Editor mit Byte-Warnung, Keyword-Highlighting & Editierfunktion")
+st.title("🛠️ Amazon Listing Editor – Keyword-Highlighting & Byte-Kontrolle")
 
 uploaded_file = st.file_uploader("📁 Excel-Datei hochladen", type=["xlsx"])
 
@@ -17,8 +17,7 @@ if uploaded_file:
     if not all(col in df.columns for col in expected_columns):
         st.error("❌ Die Datei muss folgende Spalten enthalten: " + ", ".join(expected_columns))
     else:
-        st.sidebar.header("🔑 Keyword-Liste")
-
+        # Byte-Limits pro Feld
         limits = {
             'Titel': 150,
             'Bullet1': 200, 'Bullet2': 200, 'Bullet3': 200,
@@ -27,10 +26,13 @@ if uploaded_file:
             'SearchTerms': 250
         }
 
+        # Ein- und ausklappbare Keyword-Liste pro Listing
+        with st.sidebar.expander("🔑 Keyword-Liste ein-/ausklappen", expanded=False):
+            st.markdown("Die Keywords der aktuellen Listings werden automatisch hier angezeigt, sobald du ein Listing öffnest.")
+
         for idx, row in df.iterrows():
             with st.expander(f"📝 Listing {idx + 1}", expanded=False):
-                st.sidebar.markdown(f"### Listing {idx + 1}")
-
+                st.subheader(f"Listing {idx + 1}")
                 raw_keywords = str(row['Keywords'])
                 keywords = [kw.strip() for kw in raw_keywords.lower().split(",") if kw.strip()]
                 used_keywords = set()
@@ -55,41 +57,45 @@ if uploaded_file:
                 for section in ['Titel', 'Bullet1', 'Bullet2', 'Bullet3', 'Bullet4', 'Bullet5', 'Description', 'SearchTerms']:
                     content = row.get(section, "")
                     byte_limit = limits.get(section, 9999)
+
+                    st.markdown(f"<div style='margin-top:1em; font-weight:bold; font-size:16px'>{section}</div>", unsafe_allow_html=True)
+
                     edited = st.text_area(
-                        f"{section} (Max: {byte_limit} Bytes)",
+                        f"{section} Inhalt",
                         value=content,
                         key=f"{section}_{idx}",
-                        help=f"Maximale Byteanzahl: {byte_limit}"
+                        label_visibility="collapsed",
+                        height=100
                     )
                     new_row[section] = edited
 
-                    # Echtzeit-Byte-Anzeige
                     current_bytes = len(edited.encode('utf-8'))
                     over_limit = current_bytes > byte_limit
-                    color = "red" if over_limit else "black"
-                    st.markdown(f"<span style='color:{color}'>Aktuelle Bytes: {current_bytes} / {byte_limit}</span>", unsafe_allow_html=True)
+                    color = "#ff4d4d" if over_limit else "#999999"
 
-                    # Vorschau mit Keyword-Highlighting
-                    highlighted, byte_len, found_kw = highlight_keywords(edited, keywords)
+                    # Dezent platzierte Byte-Info
+                    st.markdown(f"<div style='font-size:11px; color:{color}; margin-bottom:4px;'>Bytes: {current_bytes} / {byte_limit}</div>", unsafe_allow_html=True)
+
+                    highlighted, _, found_kw = highlight_keywords(edited, keywords)
                     used_keywords.update(found_kw)
 
-                    st.markdown(f"<div style='border:1px solid #ccc; padding:10px; border-radius:5px'>{highlighted}</div>", unsafe_allow_html=True)
-                    st.markdown("---")
+                    st.markdown(f"<div style='border:1px solid #eee; padding:10px; border-radius:5px; background-color:#fafafa'>{highlighted}</div>", unsafe_allow_html=True)
 
-                # Sidebar Keywordliste mit Markierung
-                highlighted_keywords = []
-                for kw in keywords:
-                    if kw in used_keywords:
-                        highlighted_keywords.append(f"<span style='background-color:#c8e6c9'>{kw}</span>")
-                    else:
-                        highlighted_keywords.append(f"<span>{kw}</span>")
-                st.sidebar.markdown("<br>".join(highlighted_keywords), unsafe_allow_html=True)
+                # Sidebar aktualisieren
+                with st.sidebar.expander(f"📄 Keywords für Listing {idx + 1}", expanded=False):
+                    highlighted_keywords = []
+                    for kw in keywords:
+                        if kw in used_keywords:
+                            highlighted_keywords.append(f"<span style='background-color:#c8e6c9'>{kw}</span>")
+                        else:
+                            highlighted_keywords.append(f"<span>{kw}</span>")
+                    st.markdown("<br>".join(highlighted_keywords), unsafe_allow_html=True)
 
                 # Update DataFrame
                 for key in new_row:
                     df.at[idx, key] = new_row[key]
 
-        # Download überarbeitetes Excel
+        # Excel-Export
         def convert_df_to_excel(df):
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -97,6 +103,6 @@ if uploaded_file:
             output.seek(0)
             return output
 
-        st.success("✅ Änderungen vorgenommen – du kannst die bearbeitete Datei jetzt exportieren.")
+        st.success("✅ Du kannst die überarbeitete Datei jetzt exportieren.")
         excel_data = convert_df_to_excel(df)
-        st.download_button("📥 Überarbeitete Datei herunterladen", data=excel_data, file_name="Listing_Edited.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("📥 Excel-Datei herunterladen", data=excel_data, file_name="Listing_Edited.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
