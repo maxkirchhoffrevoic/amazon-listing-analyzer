@@ -40,7 +40,22 @@ if uploaded_file:
 
 
             with col2:
-                st.markdown("<style>.field-label { font-weight: bold; margin-top: 1rem; }</style>", unsafe_allow_html=True)
+                st.markdown("""
+                <style>
+                .field-label{
+                  font-weight: 700;
+                  font-size: 1.15rem;         /* größer */
+                  color: #111827;             /* dunkler */
+                  line-height: 1.25;
+                  margin: 1rem 0 0.35rem 0;   /* mehr Abstand */
+                  display: inline-block;
+                  padding: 4px 10px;
+                  border-left: 5px solid #4F46E5; /* Akzent */
+                  background: #F3F4F6;        /* dezente Fläche */
+                  border-radius: 6px;
+                }
+                </style>
+                """, unsafe_allow_html=True)
                 listing_data = {}
                 fields = {
                     "Titel": 150,
@@ -53,7 +68,9 @@ if uploaded_file:
                     "SearchTerms": 250
                 }
                 for field, max_bytes in fields.items():
-                    content = st.text_area(f"{field}", row.get(field, ""), key=f"{field}_{i}")
+                    st.markdown(f"<div class='field-label'>{field}</div>", unsafe_allow_html=True)
+                    content = st.text_area(f"{field}", row.get(field, ""), key=f"{field}_{i}", label_visibility="collapsed")
+
                     byte_count = byte_length(content)
                     color = "red" if byte_count > max_bytes else "gray"
                     st.markdown(f"<small style='color:{color}'>Bytes: {byte_count} / {max_bytes}</small>", unsafe_allow_html=True)
