@@ -76,21 +76,22 @@ if uploaded_file:
             with col2:
                 # Überschriften-Style (größer & deutlicher) – unverändert zu deiner Version
                 st.markdown(\"\"\"
-                <style>
-                .field-label{
-                  font-weight:700;
-                  font-size:1.15rem;
-                  color:#111827;
-                  line-height:1.25;
-                  margin:1rem 0 .35rem 0;
-                  display:inline-block;
-                  padding:4px 10px;
-                  border-left:5px solid #4F46E5;
-                  background:#F3F4F6;
-                  border-radius:6px;
-                }
-                </style>
-                \"\"\", unsafe_allow_html=True)
+                    <style>
+                    .field-label{
+                      font-weight:700;
+                      font-size:1.15rem;
+                      color:#111827;
+                      line-height:1.25;
+                      margin:1rem 0 .35rem 0;
+                      display:inline-block;
+                      padding:4px 10px;
+                      border-left:5px solid #4F46E5;
+                      background:#F3F4F6;
+                      border-radius:6px;
+                    }
+                    </style>
+                \"\"\", unsafe_allow_html=True
+                )
 
                 def render_field(field_name, limit):
                     st.markdown(f"<div class='field-label'>{field_name}</div>", unsafe_allow_html=True)
