@@ -27,8 +27,7 @@ if uploaded_file:
 
 # --- Zusatz: Keywords-Only-Excel automatisch erkennen und in Maske öffnen ---
 expected_cols = ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms","Keywords"]
-    if 'df' in locals() and not df.empty:
-        cols_lower = [str(c).strip().lower() for c in df.columns]
+cols_lower = [str(c).strip().lower() for c in df.columns]
 
 # Fall A: Datei hat nur 1 Spalte -> als Keywords interpretieren
 if df.shape[1] == 1:
