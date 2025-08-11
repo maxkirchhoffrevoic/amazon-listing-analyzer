@@ -117,10 +117,10 @@ if uploaded_file:
                 str(listing_data.get(f, ""))
                 for f in ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms"]
             )
-            # Robuster, sofortiges Live‑Highlighting ohne Regex-Grenzfälle
-                used = {
-                     kw for kw in keywords
-                     if kw and kw.strip() and kw.lower() in all_text.lower()
+                    # Robuster, sofortiges Live‑Highlighting ohne Regex-Grenzfälle
+            used = {
+                kw for kw in keywords
+                if kw and kw.strip() and kw.lower() in all_text.lower()
             }
 
             chips = " ".join(
