@@ -32,20 +32,6 @@ if uploaded_file:
     expected_cols = ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms","Keywords"]
     cols_lower = [str(c).strip().lower() for c in df.columns]
 
-    if df.shape[1] == 1:
-        kw_col = df.columns[0]
-        df = pd.DataFrame({
-            "Titel": [""] * len(df),
-            "Bullet1": [""] * len(df),
-            "Bullet2": [""] * len(df),
-            "Bullet3": [""] * len(df),
-            "Bullet4": [""] * len(df),
-            "Bullet5": [""] * len(df),
-            "Description": [""] * len(df),
-            "SearchTerms": [""] * len(df),
-            "Keywords": df[kw_col].astype(str).fillna("")
-        })
-        has_product = False
 
     elif ("keywords" in cols_lower) and not any(
         c in cols_lower for c in ["titel","bullet1","bullet2","bullet3","bullet4","bullet5","description","searchterms","search terms"]
