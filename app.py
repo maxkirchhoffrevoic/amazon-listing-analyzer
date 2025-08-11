@@ -28,12 +28,13 @@ if uploaded_file:
     # Prüfe auf optionale "Product"-Spalte (nur Anzeigezweck)
     has_product = "Product" in df.columns
 
-    # --- (Optional) Keywords-only Auto-Detect: nur 1 Spalte oder nur 'Keywords' ohne Content-Spalten ---
+    # --- (Optional) Keywords-only Auto-Detect: nur 'Keywords' ohne Content-Spalten ---
     expected_cols = ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms","Keywords"]
     cols_lower = [str(c).strip().lower() for c in df.columns]
 
+    # Sonderfall A (df.shape[1] == 1) entfernt
 
-    elif ("keywords" in cols_lower) and not any(
+    if ("keywords" in cols_lower) and not any(
         c in cols_lower for c in ["titel","bullet1","bullet2","bullet3","bullet4","bullet5","description","searchterms","search terms"]
     ):
         df = df.rename(columns={c: ("Keywords" if str(c).strip().lower() == "keywords" else c) for c in df.columns})
@@ -44,6 +45,7 @@ if uploaded_file:
         order = (["Product"] if "Product" in df.columns else []) + expected_cols
         df = df[order]
         has_product = "Product" in df.columns
+
 
     # --- Bearbeitungsmaske ---
     for i, row in df.iterrows():
