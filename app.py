@@ -132,8 +132,9 @@ if uploaded_file:
     st.header("📥 Download aktualisierte Listings")
     result_df = pd.DataFrame(updated_rows)
     if "Product" in result_df.columns:
-    cols = ["Product"] + [c for c in result_df.columns if c != "Product"]
-    result_df = result_df[cols]
+        cols = ["Product"] + [c for c in result_df.columns if c != "Product"]
+        result_df = result_df[cols]
+
 
 
     output = BytesIO()
