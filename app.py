@@ -137,10 +137,17 @@ if uploaded_file:
     # --- Download --- (Product als erste Spalte, falls vorhanden)
     st.markdown("---")
     st.header("📥 Download aktualisierte Listings")
+
+# Build DataFrame aus den bearbeiteten Zeilen
     result_df = pd.DataFrame(updated_rows)
-    if "Product" in result_df.columns:
-        cols = ["Product"] + [c for c in result_df.columns if c != "Product"]
-        result_df = result_df[cols]
+
+# ➜ NEU: 'Product' IMMER vorhanden machen und an die erste Stelle setzen
+    if "Product" not in result_df.columns:
+        result_df["Product"] = ""          # leere Product-Spalte hinzufügen
+
+    cols = ["Product"] + [c for c in result_df.columns if c != "Product"]
+    result_df = result_df[cols]
+
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
