@@ -1,13 +1,12 @@
-
 import streamlit as st
 import pandas as pd
-import base64
 import re
+from io import BytesIO
 
 st.set_page_config(layout="wide")
 st.title("🛠️ Amazon Listing Editor mit Keyword-Highlighting")
 
-# Funktion zum Hervorheben von Keywords im Text
+# --- Hilfsfunktionen ---
 def highlight_keywords(text, keywords):
     if not text:
         return ""
@@ -16,85 +15,123 @@ def highlight_keywords(text, keywords):
         text = re.sub(f"(?i)({escaped_kw})", r'<mark>\1</mark>', text)
     return text
 
-# Funktion zur Berechnung der Byte-Länge
 def byte_length(text):
     return len(text.encode("utf-8"))
 
-# Excel-Datei hochladen
+# --- Upload ---
 uploaded_file = st.file_uploader("📤 Excel-Datei mit Listings hochladen", type=["xlsx"])
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
     updated_rows = []
 
-    # Durch alle Listings iterieren
+    # Prüfe auf optionale "Product"-Spalte (nur Anzeigezweck)
+    has_product = "Product" in df.columns
+
+    # --- (Optional) Keywords-only Auto-Detect: nur 1 Spalte oder nur 'Keywords' ohne Content-Spalten ---
+    expected_cols = ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms","Keywords"]
+    cols_lower = [str(c).strip().lower() for c in df.columns]
+
+    if df.shape[1] == 1:
+        kw_col = df.columns[0]
+        df = pd.DataFrame({
+            "Titel": [""] * len(df),
+            "Bullet1": [""] * len(df),
+            "Bullet2": [""] * len(df),
+            "Bullet3": [""] * len(df),
+            "Bullet4": [""] * len(df),
+            "Bullet5": [""] * len(df),
+            "Description": [""] * len(df),
+            "SearchTerms": [""] * len(df),
+            "Keywords": df[kw_col].astype(str).fillna("")
+        })
+        has_product = False  # es gibt hier keine Product-Info
+
+    elif ("keywords" in cols_lower) and not any(
+        c in cols_lower for c in ["titel","bullet1","bullet2","bullet3","bullet4","bullet5","description","searchterms","search terms"]
+    ):
+        df = df.rename(columns={c: ("Keywords" if str(c).strip().lower() == "keywords" else c) for c in df.columns})
+        df["Keywords"] = df["Keywords"].astype(str).fillna("")
+        for col in ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms"]:
+            if col not in df.columns:
+                df[col] = ""
+        # Re-order
+        df = df[[c for c in (["Product"] if "Product" in df.columns else [])] + expected_cols]
+        has_product = "Product" in df.columns
+
+    # --- Bearbeitungsmaske ---
     for i, row in df.iterrows():
-        with st.expander(f"📦 Listing {i+1} – einklappen/ausklappen", expanded=False):
+        listing_label = row["Product"] if has_product and pd.notna(row.get("Product", "")) and str(row.get("Product", "")).strip() != "" else f"Listing {i+1}"
+
+        with st.expander(f"📦 {listing_label} – einklappen/ausklappen", expanded=False):
             col1, col2 = st.columns([1, 3])
 
             with col1:
-                st.markdown(f"### ✏️ Keywords für Listing {i+1}")
-                keywords_raw = st.text_area("Keywords (durch Komma und/oder Zeilenumbrüche getrennt)", row.get("Keywords", ""), key=f"kw_input_{i}")
+                st.markdown(f"### ✏️ Keywords für {listing_label}")
+                keywords_raw = str(row.get("Keywords", ""))
+                # Komma oder Zeilenumbruch als Trenner erlauben
                 keywords = [kw.strip() for kw in re.split(r"[,\n]", keywords_raw) if kw.strip()]
-                
-                
+                keywords_input = st.text_area("Keywords (Komma oder Zeilenumbruch)", value=keywords_raw, key=f"kw_input_{i}")
+                keywords = [kw.strip() for kw in re.split(r"[,\n]", keywords_input) if kw.strip()]
 
+                # dynamische Markierung der benutzten Keywords (aus allen Contentfeldern)
+                def content_concat(r):
+                    return " ".join(str(r.get(f, "")) for f in ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms"])
+                all_text = content_concat(row)
+                used = {kw for kw in keywords if re.search(rf"\b{re.escape(kw)}\b", all_text, re.IGNORECASE)}
+                chips = " ".join(
+                    f"<span style='background:{('#d4edda' if kw in used else '#f3f4f6')};border:1px solid #e5e7eb;border-radius:6px;padding:2px 6px;margin:2px;display:inline-block'>{kw}</span>"
+                    for kw in keywords
+                )
+                st.markdown(chips, unsafe_allow_html=True)
 
             with col2:
+                # Überschriften-Style (größer & deutlicher)
                 st.markdown("""
                 <style>
                 .field-label{
-                  font-weight: 700;
-                  font-size: 1.15rem;         /* größer */
-                  color: #111827;             /* dunkler */
-                  line-height: 1.25;
-                  margin: 1rem 0 0.35rem 0;   /* mehr Abstand */
-                  display: inline-block;
-                  padding: 4px 10px;
-                  border-left: 5px solid #4F46E5; /* Akzent */
-                  background: #F3F4F6;        /* dezente Fläche */
-                  border-radius: 6px;
+                  font-weight:700;
+                  font-size:1.15rem;
+                  color:#111827;
+                  line-height:1.25;
+                  margin:1rem 0 .35rem 0;
+                  display:inline-block;
+                  padding:4px 10px;
+                  border-left:5px solid #4F46E5;
+                  background:#F3F4F6;
+                  border-radius:6px;
                 }
                 </style>
                 """, unsafe_allow_html=True)
+
+                def render_field(field_name, limit):
+                    st.markdown(f"<div class='field-label'>{field_name}</div>", unsafe_allow_html=True)
+                    value = st.text_area(field_name, value=str(row.get(field_name, "")), key=f"{field_name}_{i}", label_visibility="collapsed", height=90)
+                    # Byte-Anzeige
+                    blen = byte_length(value)
+                    st.markdown(f"<div style='font-size:.8rem;color:{'red' if blen>limit else '#6b7280'}'>Bytes: {blen} / {limit}</div>", unsafe_allow_html=True)
+                    # Vorschau mit Highlight
+                    preview = highlight_keywords(value, keywords)
+                    st.markdown(f"<div style='padding:.5rem;border:1px solid #e5e7eb;border-radius:6px;background:#fafafa'>{preview}</div>", unsafe_allow_html=True)
+                    return value
+
                 listing_data = {}
-                fields = {
-                    "Titel": 150,
-                    "Bullet1": 200,
-                    "Bullet2": 200,
-                    "Bullet3": 200,
-                    "Bullet4": 200,
-                    "Bullet5": 200,
-                    "Description": 2000,
-                    "SearchTerms": 250
+                limits = {
+                    "Titel": 150, "Bullet1": 200, "Bullet2": 200, "Bullet3": 200,
+                    "Bullet4": 200, "Bullet5": 200, "Description": 2000, "SearchTerms": 250
                 }
-                for field, max_bytes in fields.items():
-                    st.markdown(f"<div class='field-label'>{field}</div>", unsafe_allow_html=True)
-                    content = st.text_area(f"{field}", row.get(field, ""), key=f"{field}_{i}", label_visibility="collapsed")
+                for fname, lim in limits.items():
+                    listing_data[fname] = render_field(fname, lim)
+                listing_data["Keywords"] = keywords_input
+                if has_product:
+                    listing_data["Product"] = row.get("Product", "")
 
-                    byte_count = byte_length(content)
-                    color = "red" if byte_count > max_bytes else "gray"
-                    st.markdown(f"<small style='color:{color}'>Bytes: {byte_count} / {max_bytes}</small>", unsafe_allow_html=True)
-                    preview = highlight_keywords(content, keywords)
-                    st.markdown(f"<div style='padding: 0.5rem; border: 1px solid #eee;'>{preview}</div>", unsafe_allow_html=True)
-                    listing_data[field] = content
-                listing_data["Keywords"] = keywords_raw
-                
-        # Dynamische Keyword-Highlighting-Liste
-        highlighted_list = []
-        all_content = " ".join(listing_data.get(field, "") for field in ["Titel", "Bullet1", "Bullet2", "Bullet3", "Bullet4", "Bullet5", "Description", "SearchTerms"])
-        for kw in keywords:
-            color = "#d4edda" if re.search(rf"\b{re.escape(kw)}\b", all_content, re.IGNORECASE) else "transparent"
-            highlighted_list.append(f"<span style='background-color:{color}; padding:2px 4px; border-radius:4px; display:inline-block; margin:2px'>{kw}</span>")
-        with col1:
-            st.markdown(" ".join(highlighted_list), unsafe_allow_html=True)
+            updated_rows.append(listing_data)
 
-        updated_rows.append(listing_data)
-
-    # Neue Excel-Datei zum Download
+    # --- Download ---
     st.markdown("---")
     st.header("📥 Download aktualisierte Listings")
     result_df = pd.DataFrame(updated_rows)
-    from io import BytesIO
+
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         result_df.to_excel(writer, index=False)
