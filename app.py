@@ -117,10 +117,12 @@ if uploaded_file:
                 str(listing_data.get(f, ""))
                 for f in ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms"]
             )
-            used = {
-                kw for kw in keywords
-                if re.search(rf"\b{re.escape(kw)}\b", all_text, re.IGNORECASE)
+            # Robuster, sofortiges Live‑Highlighting ohne Regex-Grenzfälle
+                used = {
+                     kw for kw in keywords
+                     if kw and kw.strip() and kw.lower() in all_text.lower()
             }
+
             chips = " ".join(
                 f"<span style='background:{('#d4edda' if kw in used else '#f3f4f6')};"
                 f"border:1px solid #e5e7eb;border-radius:6px;padding:2px 6px;margin:2px;display:inline-block'>{kw}</span>"
