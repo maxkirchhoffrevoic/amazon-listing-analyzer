@@ -24,34 +24,6 @@ def byte_length(text):
 uploaded_file = st.file_uploader("📤 Excel-Datei mit Listings hochladen", type=["xlsx"])
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
-
-# --- Zusatz: Keywords-Only-Excel automatisch erkennen und in Maske öffnen ---
-expected_cols = ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms","Keywords"]
-cols_lower = [str(c).strip().lower() for c in df.columns]
-
-# Fall A: Datei hat nur 1 Spalte -> als Keywords interpretieren
-if df.shape[1] == 1:
-    kw_col = df.columns[0]
-    df = pd.DataFrame({
-        "Titel": ["" for _ in range(len(df))],
-        "Bullet1": ["" for _ in range(len(df))],
-        "Bullet2": ["" for _ in range(len(df))],
-        "Bullet3": ["" for _ in range(len(df))],
-        "Bullet4": ["" for _ in range(len(df))],
-        "Bullet5": ["" for _ in range(len(df))],
-        "Description": ["" for _ in range(len(df))],
-        "SearchTerms": ["" for _ in range(len(df))],
-        "Keywords": df[kw_col].astype(str).fillna("")
-    })
-# Fall B: Datei hat Spalte 'Keywords', aber keine der Content-Spalten -> ebenfalls Keywords-only
-elif ("keywords" in cols_lower) and not any(c in cols_lower for c in ["titel","bullet1","bullet2","bullet3","bullet4","bullet5","description","searchterms","search terms"]):
-    rename_map = {c: ("Keywords" if str(c).strip().lower()=="keywords" else c) for c in df.columns}
-    df = df.rename(columns=rename_map)
-    df["Keywords"] = df["Keywords"].astype(str).fillna("")
-    for col in ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms"]:
-        if col not in df.columns:
-            df[col] = ""
-    df = df[expected_cols]
     updated_rows = []
 
     # Durch alle Listings iterieren
