@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import re
@@ -44,7 +45,7 @@ if uploaded_file:
             "SearchTerms": [""] * len(df),
             "Keywords": df[kw_col].astype(str).fillna("")
         })
-        has_product = False  # es gibt hier keine Product-Info
+        has_product = False
 
     elif ("keywords" in cols_lower) and not any(
         c in cols_lower for c in ["titel","bullet1","bullet2","bullet3","bullet4","bullet5","description","searchterms","search terms"]
@@ -54,8 +55,8 @@ if uploaded_file:
         for col in ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms"]:
             if col not in df.columns:
                 df[col] = ""
-        # Re-order
-        df = df[[c for c in (["Product"] if "Product" in df.columns else [])] + expected_cols]
+        order = (["Product"] if "Product" in df.columns else []) + expected_cols
+        df = df[order]
         has_product = "Product" in df.columns
 
     # --- Bearbeitungsmaske ---
@@ -68,25 +69,13 @@ if uploaded_file:
             with col1:
                 st.markdown(f"### ✏️ Keywords für {listing_label}")
                 keywords_raw = str(row.get("Keywords", ""))
-                # Komma oder Zeilenumbruch als Trenner erlauben
-                keywords = [kw.strip() for kw in re.split(r"[,\n]", keywords_raw) if kw.strip()]
+                # Komma ODER Zeilenumbruch als Trenner
                 keywords_input = st.text_area("Keywords (Komma oder Zeilenumbruch)", value=keywords_raw, key=f"kw_input_{i}")
                 keywords = [kw.strip() for kw in re.split(r"[,\n]", keywords_input) if kw.strip()]
 
-                # dynamische Markierung der benutzten Keywords (aus allen Contentfeldern)
-                def content_concat(r):
-                    return " ".join(str(r.get(f, "")) for f in ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms"])
-                all_text = content_concat(row)
-                used = {kw for kw in keywords if re.search(rf"\b{re.escape(kw)}\b", all_text, re.IGNORECASE)}
-                chips = " ".join(
-                    f"<span style='background:{('#d4edda' if kw in used else '#f3f4f6')};border:1px solid #e5e7eb;border-radius:6px;padding:2px 6px;margin:2px;display:inline-block'>{kw}</span>"
-                    for kw in keywords
-                )
-                st.markdown(chips, unsafe_allow_html=True)
-
             with col2:
-                # Überschriften-Style (größer & deutlicher)
-                st.markdown("""
+                # Überschriften-Style (größer & deutlicher) – unverändert zu deiner Version
+                st.markdown(\"\"\"
                 <style>
                 .field-label{
                   font-weight:700;
@@ -101,15 +90,13 @@ if uploaded_file:
                   border-radius:6px;
                 }
                 </style>
-                """, unsafe_allow_html=True)
+                \"\"\", unsafe_allow_html=True)
 
                 def render_field(field_name, limit):
                     st.markdown(f"<div class='field-label'>{field_name}</div>", unsafe_allow_html=True)
                     value = st.text_area(field_name, value=str(row.get(field_name, "")), key=f"{field_name}_{i}", label_visibility="collapsed", height=90)
-                    # Byte-Anzeige
                     blen = byte_length(value)
                     st.markdown(f"<div style='font-size:.8rem;color:{'red' if blen>limit else '#6b7280'}'>Bytes: {blen} / {limit}</div>", unsafe_allow_html=True)
-                    # Vorschau mit Highlight
                     preview = highlight_keywords(value, keywords)
                     st.markdown(f"<div style='padding:.5rem;border:1px solid #e5e7eb;border-radius:6px;background:#fafafa'>{preview}</div>", unsafe_allow_html=True)
                     return value
@@ -125,12 +112,32 @@ if uploaded_file:
                 if has_product:
                     listing_data["Product"] = row.get("Product", "")
 
+            # --- HIER: Dynamische Keyword-Hervorhebung basierend auf aktuellem Content ---
+            all_text = " ".join(
+                str(listing_data.get(f, ""))
+                for f in ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms"]
+            )
+            used = {
+                kw for kw in keywords
+                if re.search(rf"\b{re.escape(kw)}\b", all_text, re.IGNORECASE)
+            }
+            chips = " ".join(
+                f"<span style='background:{('#d4edda' if kw in used else '#f3f4f6')};"
+                f"border:1px solid #e5e7eb;border-radius:6px;padding:2px 6px;margin:2px;display:inline-block'>{kw}</span>"
+                for kw in keywords
+            )
+            with col1:
+                st.markdown(chips, unsafe_allow_html=True)
+
             updated_rows.append(listing_data)
 
-    # --- Download ---
+    # --- Download --- (Product als erste Spalte, falls vorhanden)
     st.markdown("---")
     st.header("📥 Download aktualisierte Listings")
     result_df = pd.DataFrame(updated_rows)
+    if "Product" in result_df.columns:
+        cols = ["Product"] + [c for c in result_df.columns if c != "Product"]
+        result_df = result_df[cols]
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
