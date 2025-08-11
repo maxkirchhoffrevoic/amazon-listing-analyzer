@@ -34,8 +34,7 @@ if uploaded_file:
             with col1:
                 st.markdown(f"### ✏️ Keywords für Listing {i+1}")
                 keywords_raw = st.text_area("Keywords (durch Komma getrennt)", row.get("Keywords", ""), key=f"kw_input_{i}")
-                keywords = [kw.strip() for kw in re.split(r"[,
-]", keywords_raw) if kw.strip()]
+                keywords = [kw.strip() for kw in re.split(r"[,\n]", keywords_raw) if kw.strip()]
                 
                 
 
