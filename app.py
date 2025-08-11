@@ -43,7 +43,7 @@ if uploaded_file:
             "Bullet5": [""] * len(df),
             "Description": [""] * len(df),
             "SearchTerms": [""] * len(df),
-            "Keywords": df[kw_col].astype(str).fillna("")
+            "Keywords":  [""] * len(df)
         })
         has_product = False
 
