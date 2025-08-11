@@ -75,7 +75,7 @@ if uploaded_file:
 
             with col2:
                 # Überschriften-Style (größer & deutlicher) – unverändert zu deiner Version
-                st.markdown(\"\"\"
+                st.markdown("""
                     <style>
                     .field-label{
                       font-weight:700;
@@ -90,7 +90,7 @@ if uploaded_file:
                       border-radius:6px;
                     }
                     </style>
-                \"\"\", unsafe_allow_html=True
+                """, unsafe_allow_html=True
                 )
 
                 def render_field(field_name, limit):
