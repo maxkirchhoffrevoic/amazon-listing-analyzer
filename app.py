@@ -49,7 +49,14 @@ if uploaded_file:
 
     # --- Bearbeitungsmaske ---
     for i, row in df.iterrows():
-        listing_label = row["Product"] if has_product and pd.notna(row.get("Product", "")) and str(row.get("Product", "")).strip() != "" else f"Listing {i+1}"
+    # Default-Name bestimmen
+        default_name = (str(row.get("Product", "")).strip() if has_product else "") or f"Listing {i+1}"
+        # Session-State initialisieren (nur einmal pro Listing)
+        if f"product_{i}" not in st.session_state:
+            st.session_state[f"product_{i}"] = default_name
+        # Expander-Titel immer aus dem aktuellen Session-State lesen (live-Update)
+        listing_label = st.session_state[f"product_{i}"]
+
 
         with st.expander(f"📦 {listing_label} – einklappen/ausklappen", expanded=False):
             col1, col2 = st.columns([1, 3])
@@ -60,6 +67,11 @@ if uploaded_file:
 
 
             with col1:
+                st.text_input(
+                     "Listing-Name (Product)",
+                     value=st.session_state[f"product_{i}"],
+                     key=f"product_{i}"
+                 )
                 st.markdown(f"### ✏️ Keywords für {listing_label}")
                 keywords_raw = str(row.get("Keywords", ""))
                 # Komma ODER Zeilenumbruch als Trenner
@@ -103,7 +115,8 @@ if uploaded_file:
                 for fname, lim in limits.items():
                     listing_data[fname] = render_field(fname, lim)
                 listing_data["Keywords"] = keywords_input
-                listing_data["Product"] = product_name
+                listing_data["Product"] = st.session_state.get(f"product_{i}", default_name)
+
 
 
             # --- HIER: Dynamische Keyword-Hervorhebung basierend auf aktuellem Content ---
