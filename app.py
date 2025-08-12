@@ -54,6 +54,11 @@ if uploaded_file:
         with st.expander(f"📦 {listing_label} – einklappen/ausklappen", expanded=False):
             col1, col2 = st.columns([1, 3])
 
+        # Listing-Name (Product) separat editierbar, nicht keyword-sensitiv
+            product_name_default = str(row.get("Product", "")).strip() if has_product else f"Listing {i+1}"
+            product_name = st.text_input("Listing-Name (Product)", value=product_name_default, key=f"product_{i}")
+
+
             with col1:
                 st.markdown(f"### ✏️ Keywords für {listing_label}")
                 keywords_raw = str(row.get("Keywords", ""))
@@ -98,8 +103,8 @@ if uploaded_file:
                 for fname, lim in limits.items():
                     listing_data[fname] = render_field(fname, lim)
                 listing_data["Keywords"] = keywords_input
-                if has_product:
-                    listing_data["Product"] = row.get("Product", "")
+                listing_data["Product"] = product_name
+
 
             # --- HIER: Dynamische Keyword-Hervorhebung basierend auf aktuellem Content ---
             all_text = " ".join(
