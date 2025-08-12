@@ -6,6 +6,35 @@ from io import BytesIO
 st.set_page_config(layout="wide")
 st.title("🛠️ Amazon Listing Editor mit Keyword-Highlighting")
 
+# --- Erklärungstext unterhalb der Überschrift ---
+st.markdown("""
+## 📝 Funktionsweise des Tools
+
+Dieses Tool dient zur Bearbeitung und Analyse von Amazon-Listing-Inhalten direkt im Browser.  
+Du kannst eine Excel-Datei hochladen, deren Inhalte in einer komfortablen Oberfläche angezeigt, live bearbeitet und mit einer Keyword-Liste abgeglichen werden. Dabei werden genutzte Keywords farblich hervorgehoben, und die Zeichen- bzw. Byte-Längen der Felder werden in Echtzeit geprüft.  
+
+Nach der Bearbeitung kannst du die aktualisierten Daten wieder als Excel herunterladen – mit allen Änderungen, einschließlich des geänderten Listing-Namens.
+
+---
+
+## 📂 Anforderungen an die hochzuladene Excel
+
+Damit die Datei korrekt eingelesen wird, muss sie folgende Struktur erfüllen:
+
+- **Format:** `.xlsx` (Excel-Datei, keine CSV oder andere Formate)  
+- **Tabellenstruktur:**  
+  - Die Spalten sollten wie folgt benannt sein, dabei spielt die Reihenfolge der Spalten keine Rolle:
+    ```
+    Product | Titel | Bullet1 | Bullet2 | Bullet3 | Bullet4 | Bullet5 | Description | SearchTerms | Keywords
+    ```
+
+---
+
+## 🔍 Wichtige Hinweise
+- Das Tool erkennt automatisch, welche Keywords im Content vorkommen, und markiert diese **sowohl in der Content-Vorschau als auch in der Keywordliste**.
+- Die Spaltenlängen werden in Bytes gezählt, damit sie den Amazon-Limits entsprechen (z. B. Titel max. 150 Bytes, Bullet-Points max. 200 Bytes etc.).
+""")
+
 # --- Hilfsfunktionen ---
 def highlight_keywords(text, keywords):
     if not text:
