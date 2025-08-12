@@ -23,7 +23,7 @@ Damit die Datei korrekt eingelesen wird, muss sie folgende Struktur erfüllen:
 
 - **Format:** `.xlsx` (Excel-Datei, keine CSV oder andere Formate)  
 - **Tabellenstruktur:**  
-  - Die Spalten sollten wie folgt benannt sein, dabei spielt die Reihenfolge der Spalten keine Rolle:
+  - Die Spalten sollten wie folgt benannt sein, **dabei spielt die Reihenfolge der Spalten keine Rolle**:
     ```
     Product | Titel | Bullet1 | Bullet2 | Bullet3 | Bullet4 | Bullet5 | Description | SearchTerms | Keywords
     ```
