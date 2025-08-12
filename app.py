@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import re
@@ -25,14 +24,9 @@ if uploaded_file:
     df = pd.read_excel(uploaded_file)
     updated_rows = []
 
-    # Prüfe auf optionale "Product"-Spalte (nur Anzeigezweck)
     has_product = "Product" in df.columns
-
-    # --- (Optional) Keywords-only Auto-Detect: nur 'Keywords' ohne Content-Spalten ---
     expected_cols = ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms","Keywords"]
     cols_lower = [str(c).strip().lower() for c in df.columns]
-
-    # Sonderfall A (df.shape[1] == 1) entfernt
 
     if ("keywords" in cols_lower) and not any(
         c in cols_lower for c in ["titel","bullet1","bullet2","bullet3","bullet4","bullet5","description","searchterms","search terms"]
@@ -46,28 +40,27 @@ if uploaded_file:
         df = df[order]
         has_product = "Product" in df.columns
 
-
-    # --- Bearbeitungsmaske ---
     for i, row in df.iterrows():
-        listing_label = row["Product"] if has_product and pd.notna(row.get("Product", "")) and str(row.get("Product", "")).strip() != "" else f"Listing {i+1}"
+        default_name = (str(row.get("Product", "")).strip() if has_product else "") or f"Listing {i+1}"
+        if f"product_{i}" not in st.session_state:
+            st.session_state[f"product_{i}"] = default_name
+        listing_label = st.session_state[f"product_{i}"]
 
         with st.expander(f"📦 {listing_label} – einklappen/ausklappen", expanded=False):
             col1, col2 = st.columns([1, 3])
 
-        # Listing-Name (Product) separat editierbar, nicht keyword-sensitiv
-            product_name_default = str(row.get("Product", "")).strip() if has_product else f"Listing {i+1}"
-            product_name = st.text_input("Listing-Name (Product)", value=product_name_default, key=f"product_{i}")
-
-
             with col1:
-                st.markdown(f"### ✏️ Keywords für {listing_label}")
+                st.text_input(
+                    "Listing-Name (Product)",
+                    value=st.session_state[f"product_{i}"],
+                    key=f"product_{i}"
+                )
+                st.markdown(f"### ✏️ Keywords für {st.session_state[f'product_{i}']}")
                 keywords_raw = str(row.get("Keywords", ""))
-                # Komma ODER Zeilenumbruch als Trenner
                 keywords_input = st.text_area("Keywords (Komma oder Zeilenumbruch)", value=keywords_raw, key=f"kw_input_{i}")
                 keywords = [kw.strip() for kw in re.split(r"[,\n]", keywords_input) if kw.strip()]
 
             with col2:
-                # Überschriften-Style (größer & deutlicher) – unverändert zu deiner Version
                 st.markdown("""
                     <style>
                     .field-label{
@@ -103,15 +96,12 @@ if uploaded_file:
                 for fname, lim in limits.items():
                     listing_data[fname] = render_field(fname, lim)
                 listing_data["Keywords"] = keywords_input
-                listing_data["Product"] = product_name
+                listing_data["Product"] = st.session_state.get(f"product_{i}", default_name)
 
-
-            # --- HIER: Dynamische Keyword-Hervorhebung basierend auf aktuellem Content ---
             all_text = " ".join(
                 str(listing_data.get(f, ""))
                 for f in ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms"]
             )
-                    # Robuster, sofortiges Live‑Highlighting ohne Regex-Grenzfälle
             used = {
                 kw for kw in keywords
                 if kw and kw.strip() and kw.lower() in all_text.lower()
@@ -127,20 +117,13 @@ if uploaded_file:
 
             updated_rows.append(listing_data)
 
-    # --- Download --- (Product als erste Spalte, falls vorhanden)
     st.markdown("---")
     st.header("📥 Download aktualisierte Listings")
-
-# Build DataFrame aus den bearbeiteten Zeilen
     result_df = pd.DataFrame(updated_rows)
-
-# ➜ NEU: 'Product' IMMER vorhanden machen und an die erste Stelle setzen
     if "Product" not in result_df.columns:
-        result_df["Product"] = ""          # leere Product-Spalte hinzufügen
-
+        result_df["Product"] = ""
     cols = ["Product"] + [c for c in result_df.columns if c != "Product"]
     result_df = result_df[cols]
-
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
