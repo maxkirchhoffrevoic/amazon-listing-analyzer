@@ -46,15 +46,26 @@ if uploaded_file:
             st.session_state[f"product_{i}"] = default_name
         listing_label = st.session_state[f"product_{i}"]
 
-        with st.expander(f"📦 {listing_label} – einklappen/ausklappen", expanded=False):
+        # --- Expander offen/zu Status merken ---
+        open_key = f"exp_open_{i}"
+        if open_key not in st.session_state:
+            st.session_state[open_key] = False  # Standard: zu
+
+        with st.expander(f"📦 {listing_label} – einklappen/ausklappen", expanded=st.session_state[open_key]):
             col1, col2 = st.columns([1, 3])
 
             with col1:
+                # Funktion, um Expander beim Tippen offen zu halten
+                def _keep_open_expander(key=open_key):
+                    st.session_state[key] = True
+
                 st.text_input(
                     "Listing-Name (Product)",
                     value=st.session_state[f"product_{i}"],
-                    key=f"product_{i}"
+                    key=f"product_{i}",
+                    on_change=_keep_open_expander
                 )
+
                 st.markdown(f"### ✏️ Keywords für {st.session_state[f'product_{i}']}")
                 keywords_raw = str(row.get("Keywords", ""))
                 keywords_input = st.text_area("Keywords (Komma oder Zeilenumbruch)", value=keywords_raw, key=f"kw_input_{i}")
