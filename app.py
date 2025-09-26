@@ -104,8 +104,7 @@ def _call_openai_and_parse(prompt_text: str) -> dict:
             messages=[
                 {"role": "system", "content": "Du bist ein hilfreicher, präziser Assistent."},
                 {"role": "user", "content": prompt_text},
-            ],
-            temperature=0.7,
+            ]
         )
         text = resp.choices[0].message.content.strip()
         # JSON extrahieren
