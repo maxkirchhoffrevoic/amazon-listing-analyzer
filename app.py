@@ -12,7 +12,335 @@ try:
 except Exception:
     _HAS_OPENAI = False
 
-st.set_page_config(layout="wide")
+st.set_page_config(
+    page_title="Amazon Listing Editor",
+    page_icon="📦",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# ============ MODERNES CSS-DESIGN ============
+st.markdown("""
+<style>
+    /* Hauptfarben basierend auf React-Design */
+    :root {
+        --primary: hsl(27, 96%, 61%);
+        --primary-foreground: hsl(0, 0%, 100%);
+        --background: hsl(220, 15%, 97%);
+        --foreground: hsl(220, 20%, 10%);
+        --card: hsl(0, 0%, 100%);
+        --border: hsl(220, 15%, 88%);
+        --muted: hsl(220, 15%, 94%);
+        --muted-foreground: hsl(220, 10%, 40%);
+        --success: hsl(142, 76%, 36%);
+        --warning: hsl(38, 92%, 50%);
+        --destructive: hsl(0, 84%, 60%);
+    }
+
+    /* Hauptcontainer */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+
+    /* Header Styling */
+    .stApp > header {
+        background-color: var(--card);
+        border-bottom: 1px solid var(--border);
+    }
+
+    /* Titel Styling */
+    h1 {
+        color: var(--foreground);
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+
+    /* Buttons */
+    .stButton > button {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border: none;
+        border-radius: 0.5rem;
+        padding: 0.5rem 1.5rem;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .stButton > button:hover {
+        background: hsl(27, 96%, 55%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Text Areas */
+    .stTextArea > div > div > textarea {
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        font-family: 'Monaco', 'Courier New', monospace;
+        font-size: 0.875rem;
+        transition: border-color 0.2s;
+    }
+
+    .stTextArea > div > div > textarea:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(27, 96%, 61%, 0.1);
+    }
+
+    /* Text Input */
+    .stTextInput > div > div > input {
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        transition: border-color 0.2s;
+    }
+
+    .stTextInput > div > div > input:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(27, 96%, 61%, 0.1);
+    }
+
+    /* File Uploader */
+    .stFileUploader > div {
+        border: 2px dashed var(--border);
+        border-radius: 0.75rem;
+        padding: 2rem;
+        transition: all 0.3s;
+    }
+
+    .stFileUploader > div:hover {
+        border-color: var(--primary);
+        background: rgba(27, 96%, 61%, 0.05);
+    }
+
+    /* Expander */
+    .streamlit-expanderHeader {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        padding: 1rem;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+
+    .streamlit-expanderHeader:hover {
+        background: var(--muted);
+    }
+
+    .streamlit-expanderContent {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-top: none;
+        border-radius: 0 0 0.5rem 0.5rem;
+        padding: 1.5rem;
+    }
+
+    /* Progress Bar Container */
+    .progress-container {
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .progress-bar {
+        width: 100%;
+        height: 6px;
+        background: var(--muted);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: var(--primary);
+        transition: width 0.3s;
+        border-radius: 3px;
+    }
+
+    .progress-fill.over-limit {
+        background: var(--destructive);
+    }
+
+    /* Field Label - verbessert */
+    .field-label {
+        font-weight: 600;
+        font-size: 1rem;
+        color: var(--foreground);
+        line-height: 1.25;
+        margin: 1rem 0 0.5rem 0;
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border-left: 4px solid var(--primary);
+        background: var(--muted);
+        border-radius: 0.5rem;
+    }
+
+    /* Preview Box - verbessert mit Dark Mode Support */
+    .preview-box {
+        padding: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        background: var(--muted);
+        margin-top: 0.5rem;
+        min-height: 60px;
+        color: #1f2937 !important; /* Dunkle Schrift für Light Mode */
+    }
+
+    /* Dark Mode Anpassungen - für System Dark Mode */
+    @media (prefers-color-scheme: dark) {
+        .preview-box {
+            background: hsl(220, 18%, 20%) !important;
+            color: hsl(220, 10%, 95%) !important;
+            border-color: hsl(220, 15%, 30%) !important;
+        }
+        
+        .field-label {
+            background: hsl(220, 18%, 25%) !important;
+            color: hsl(220, 10%, 95%) !important;
+        }
+        
+        .keyword-chip.unused {
+            background: hsl(220, 18%, 25%) !important;
+            color: hsl(220, 10%, 85%) !important;
+            border-color: hsl(220, 15%, 35%) !important;
+        }
+        
+        .byte-counter.under-limit {
+            color: hsl(220, 10%, 75%) !important;
+        }
+    }
+    
+    /* Streamlit Dark Mode Support */
+    [data-theme="dark"] .preview-box,
+    .stApp[data-theme="dark"] .preview-box {
+        background: hsl(220, 18%, 20%) !important;
+        color: hsl(220, 10%, 95%) !important;
+        border-color: hsl(220, 15%, 30%) !important;
+    }
+    
+    [data-theme="dark"] .field-label,
+    .stApp[data-theme="dark"] .field-label {
+        background: hsl(220, 18%, 25%) !important;
+        color: hsl(220, 10%, 95%) !important;
+    }
+    
+    [data-theme="dark"] .keyword-chip.unused,
+    .stApp[data-theme="dark"] .keyword-chip.unused {
+        background: hsl(220, 18%, 25%) !important;
+        color: hsl(220, 10%, 85%) !important;
+        border-color: hsl(220, 15%, 35%) !important;
+    }
+    
+    [data-theme="dark"] .byte-counter.under-limit,
+    .stApp[data-theme="dark"] .byte-counter.under-limit {
+        color: hsl(220, 10%, 75%) !important;
+    }
+
+    .preview-box mark {
+        background: rgba(27, 96%, 61%, 0.3);
+        padding: 0.125rem 0.25rem;
+        border-radius: 0.25rem;
+        font-weight: 500;
+        color: inherit;
+    }
+    
+    /* Dark Mode: Dunklere, weniger grelle Highlight-Farbe für bessere Lesbarkeit */
+    @media (prefers-color-scheme: dark) {
+        .preview-box mark {
+            background: hsl(220, 50%, 35%) !important; /* Dunkles Blau-Grau statt Gelb */
+            color: hsl(220, 20%, 95%) !important; /* Helle Schrift */
+            border: 1px solid hsl(220, 50%, 45%) !important;
+        }
+    }
+    
+    [data-theme="dark"] .preview-box mark,
+    .stApp[data-theme="dark"] .preview-box mark {
+        background: hsl(220, 50%, 35%) !important; /* Dunkles Blau-Grau statt Gelb */
+        color: hsl(220, 20%, 95%) !important; /* Helle Schrift */
+        border: 1px solid hsl(220, 50%, 45%) !important;
+    }
+    
+    /* Explizite Textfarbe für alle Text in Preview */
+    .preview-box * {
+        color: inherit !important;
+    }
+    
+    /* Mark-Tags sollen ihre eigene Farbe behalten */
+    .preview-box mark * {
+        color: inherit !important;
+    }
+
+    /* Byte Counter */
+    .byte-counter {
+        font-size: 0.75rem;
+        margin-top: 0.25rem;
+        font-weight: 500;
+    }
+
+    .byte-counter.over-limit {
+        color: var(--destructive);
+        font-weight: 600;
+    }
+
+    .byte-counter.under-limit {
+        color: var(--muted-foreground);
+    }
+
+    /* Keyword Chips - verbessert */
+    .keyword-chip {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        margin: 0.125rem;
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        border: 1px solid var(--border);
+        transition: all 0.2s;
+    }
+
+    .keyword-chip.used {
+        background: #d4edda;
+        border-color: var(--success);
+        color: #155724;
+    }
+
+    .keyword-chip.unused {
+        background: var(--muted);
+        border-color: var(--border);
+        color: var(--muted-foreground);
+    }
+
+    /* Cards für Sections */
+    .section-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Hide Streamlit default elements */
+    #MainMenu { visibility: hidden; }
+    footer { visibility: hidden; }
+    header { visibility: hidden; }
+
+    /* Download Button */
+    .stDownloadButton > button {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border: none;
+        border-radius: 0.5rem;
+        padding: 0.5rem 1.5rem;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .stDownloadButton > button:hover {
+        background: hsl(27, 96%, 55%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🛠️ Amazon Listing Editor mit Keyword-Highlighting")
 
 # --- Erklärungstext unterhalb der Überschrift ---
@@ -190,30 +518,24 @@ def render_listing(row, i, has_product):
             keywords = [kw.strip() for kw in re.split(r"[,\n]", keywords_input) if kw.strip()]
 
         with col2:
-            st.markdown("""
-                <style>
-                .field-label{
-                  font-weight:700;
-                  font-size:1.15rem;
-                  color:#111827;
-                  line-height:1.25;
-                  margin:1rem 0 .35rem 0;
-                  display:inline-block;
-                  padding:4px 10px;
-                  border-left:5px solid #4F46E5;
-                  background:#F3F4F6;
-                  border-radius:6px;
-                }
-                </style>
-            """, unsafe_allow_html=True)
-
             def render_field(field_name, limit):
                 st.markdown(f"<div class='field-label'>{field_name}</div>", unsafe_allow_html=True)
                 value = st.text_area(field_name, value=str(row.get(field_name, "")), key=f"{field_name}_{i}", label_visibility="collapsed", height=90)
                 blen = byte_length(value)
-                st.markdown(f"<div style='font-size:.8rem;color:{'red' if blen>limit else '#6b7280'}'>Bytes: {blen} / {limit}</div>", unsafe_allow_html=True)
+                is_over = blen > limit
+                percentage = min((blen / limit) * 100, 100)
+                counter_class = "over-limit" if is_over else "under-limit"
+                progress_class = "over-limit" if is_over else ""
+                st.markdown(f"<div class='byte-counter {counter_class}'>Bytes: {blen} / {limit}</div>", unsafe_allow_html=True)
+                st.markdown(f"""
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill {progress_class}" style="width: {percentage}%"></div>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
                 preview = highlight_keywords(value, keywords)
-                st.markdown(f"<div style='padding:.5rem;border:1px solid #e5e7eb;border-radius:6px;background:#fafafa'>{preview}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='preview-box'>{preview if preview else '<em>Kein Inhalt</em>'}</div>", unsafe_allow_html=True)
                 return value
 
             listing_data = {}
@@ -233,8 +555,7 @@ def render_listing(row, i, has_product):
         ).lower()
         used = {kw for kw in keywords if kw and kw.lower() in all_text}
         chips = " ".join(
-            f"<span style='background:{('#d4edda' if kw in used else '#f3f4f6')};"
-            f"border:1px solid #e5e7eb;border-radius:6px;padding:2px 6px;margin:2px;display:inline-block'>{kw}</span>"
+            f"<span class='keyword-chip {'used' if kw in used else 'unused'}'>{kw}</span>"
             for kw in keywords
         )
         with col1:
