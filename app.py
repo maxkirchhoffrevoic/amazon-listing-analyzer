@@ -1079,24 +1079,34 @@ if db_engine:
                 st.markdown("**Erkannte Spalten:**")
                 st.code(", ".join(upload_df.columns.tolist()))
                 
-                # Spaltennamen normalisieren (flexibler)
+                # Spaltennamen normalisieren (flexibler) - vermeide Duplikate
                 column_mapping = {}
+                used_target_names = set()  # Verhindere doppelte Zielnamen
+                
                 for col in upload_df.columns:
                     col_lower = str(col).strip().lower()
+                    target_name = None
+                    
+                    # Prüfe jeden Zielnamen und verwende nur den ersten Treffer
                     if "asin" in col_lower or "ean" in col_lower or "sku" in col_lower:
-                        column_mapping[col] = "asin_ean_sku"
-                    elif col_lower == "mp" or "marketplace" in col_lower:
-                        column_mapping[col] = "mp"
+                        target_name = "asin_ean_sku"
+                    elif col_lower == "mp" or col_lower == "marketplace":
+                        target_name = "mp"
                     elif col_lower == "name" or col_lower == "produktname":
-                        column_mapping[col] = "name"
+                        target_name = "name"
                     elif col_lower == "title":
-                        column_mapping[col] = "title"
+                        target_name = "title"
                     elif col_lower == "account":
-                        column_mapping[col] = "account"
+                        target_name = "account"
                     elif col_lower == "project" or col_lower == "projekt":
-                        column_mapping[col] = "project"
+                        target_name = "project"
                     elif col_lower == "image" or col_lower == "bild":
-                        column_mapping[col] = "image"
+                        target_name = "image"
+                    
+                    # Nur mappen, wenn Zielname noch nicht verwendet wurde
+                    if target_name and target_name not in used_target_names:
+                        column_mapping[col] = target_name
+                        used_target_names.add(target_name)
                 
                 upload_df = upload_df.rename(columns=column_mapping)
                 
@@ -1250,16 +1260,51 @@ if db_engine:
             try:
                 upload_df = pd.read_excel(upload_file_db)
                 
-                # Spaltennamen normalisieren
-                column_mapping = {
-                    "ASIN / EAN / SKU": "asin_ean_sku",
-                    "ASIN_EAN_SKU": "asin_ean_sku",
-                    "MP": "mp",
-                    "Name": "name",
-                    "Title": "title",
-                    "Account": "account",
-                    "Project": "project"
+                # Spaltennamen normalisieren - vermeide Duplikate
+                column_mapping = {}
+                used_target_names = set()
+                
+                # Definiere Mapping-Regeln (Zielname -> mögliche Quellspalten)
+                mapping_rules = {
+                    "asin_ean_sku": ["ASIN / EAN / SKU", "ASIN_EAN_SKU", "asin_ean_sku", "ASIN", "EAN", "SKU"],
+                    "mp": ["MP", "mp", "Marketplace", "marketplace"],
+                    "name": ["Name", "name", "Produktname", "produktname"],
+                    "title": ["Title", "title"],
+                    "account": ["Account", "account"],
+                    "project": ["Project", "project", "Projekt", "projekt"]
                 }
+                
+                # Finde erste passende Spalte für jeden Zielnamen
+                for target_name, possible_sources in mapping_rules.items():
+                    if target_name not in used_target_names:
+                        for source_name in possible_sources:
+                            if source_name in upload_df.columns:
+                                column_mapping[source_name] = target_name
+                                used_target_names.add(target_name)
+                                break
+                
+                # Zusätzlich: Suche nach ähnlichen Spaltennamen (flexibler)
+                for col in upload_df.columns:
+                    if col not in column_mapping:  # Nur wenn noch nicht gemappt
+                        col_lower = str(col).strip().lower()
+                        target_name = None
+                        
+                        if ("asin" in col_lower or "ean" in col_lower or "sku" in col_lower) and "asin_ean_sku" not in used_target_names:
+                            target_name = "asin_ean_sku"
+                        elif (col_lower == "mp" or "marketplace" in col_lower) and "mp" not in used_target_names:
+                            target_name = "mp"
+                        elif (col_lower == "name" or col_lower == "produktname") and "name" not in used_target_names:
+                            target_name = "name"
+                        elif col_lower == "title" and "title" not in used_target_names:
+                            target_name = "title"
+                        elif col_lower == "account" and "account" not in used_target_names:
+                            target_name = "account"
+                        elif (col_lower == "project" or col_lower == "projekt") and "project" not in used_target_names:
+                            target_name = "project"
+                        
+                        if target_name:
+                            column_mapping[col] = target_name
+                            used_target_names.add(target_name)
                 
                 upload_df = upload_df.rename(columns=column_mapping)
                 
