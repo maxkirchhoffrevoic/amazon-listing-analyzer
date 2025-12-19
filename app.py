@@ -1028,19 +1028,6 @@ if db_engine:
                 
                 if selected_idx is not None:
                     selected_row = db_df.iloc[selected_idx]
-                    # Konvertiere zu dict-Format für render_listing
-                    listing_dict = {
-                        "Product": selected_row.get("product", ""),
-                        "Titel": selected_row.get("titel", ""),
-                        "Bullet1": selected_row.get("bullet1", ""),
-                        "Bullet2": selected_row.get("bullet2", ""),
-                        "Bullet3": selected_row.get("bullet3", ""),
-                        "Bullet4": selected_row.get("bullet4", ""),
-                        "Bullet5": selected_row.get("bullet5", ""),
-                        "Description": selected_row.get("description", ""),
-                        "SearchTerms": selected_row.get("search_terms", ""),
-                        "Keywords": selected_row.get("keywords", "")
-                    }
                     
                     # Metadaten anzeigen
                     col1, col2, col3 = st.columns(3)
@@ -1051,8 +1038,28 @@ if db_engine:
                     with col3:
                         st.info(f"**Letzte Änderung:** {selected_row.get('updated_at', 'N/A')}")
                     
-                    # Bearbeitung (wird später in render_listing integriert)
-                    st.info("💡 Um dieses Listing zu bearbeiten, lade es als Excel herunter, bearbeite es und lade es wieder hoch.")
+                    # Button zum Laden in Bearbeitungsmaske
+                    if st.button("✏️ In Bearbeitungsmaske laden", key="btn_load_to_editor", type="primary"):
+                        # Speichere Listing-Daten im Session State für Bearbeitung
+                        st.session_state["db_listing_for_edit"] = {
+                            "Product": selected_row.get("product", ""),
+                            "Titel": selected_row.get("titel", ""),
+                            "Bullet1": selected_row.get("bullet1", ""),
+                            "Bullet2": selected_row.get("bullet2", ""),
+                            "Bullet3": selected_row.get("bullet3", ""),
+                            "Bullet4": selected_row.get("bullet4", ""),
+                            "Bullet5": selected_row.get("bullet5", ""),
+                            "Description": selected_row.get("description", ""),
+                            "SearchTerms": selected_row.get("search_terms", ""),
+                            "Keywords": selected_row.get("keywords", ""),
+                            "asin_ean_sku": selected_row.get("asin_ean_sku", ""),
+                            "mp": selected_row.get("mp", ""),
+                            "account": selected_row.get("account", ""),
+                            "project": selected_row.get("project", ""),
+                            "name": selected_row.get("name", "")
+                        }
+                        st.success("✅ Listing in Bearbeitungsmaske geladen! Scrolle nach unten zur Bearbeitung.")
+                        st.rerun()
         else:
             st.info("Keine Listings gefunden. Verwende die Filter oder lade Optimierungen hoch.")
     
@@ -1670,6 +1677,96 @@ if st.session_state["generated_rows"]:
         # Für generierte Reihen: Product existiert; falls leer, nehmen wir Naming wie sonst
         listing_data = render_listing(row, start_index + j, has_product=("Product" in row))
         updated_rows_all.append(listing_data)
+
+# ---- 3) Listing aus Datenbank zum Bearbeiten laden ----
+if "db_listing_for_edit" in st.session_state and st.session_state["db_listing_for_edit"]:
+    st.markdown("---")
+    st.header("✏️ Listing aus Datenbank bearbeiten")
+    
+    db_listing = st.session_state["db_listing_for_edit"]
+    
+    # Metadaten anzeigen
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.info(f"**ASIN/EAN/SKU:** {db_listing.get('asin_ean_sku', 'N/A')}")
+    with col2:
+        st.info(f"**Marketplace:** {db_listing.get('mp', 'N/A')}")
+    with col3:
+        st.info(f"**Account:** {db_listing.get('account', 'N/A')}")
+    with col4:
+        st.info(f"**Project:** {db_listing.get('project', 'N/A')}")
+    
+    # Konvertiere zu Format für render_listing (ohne Metadaten)
+    listing_for_render = {
+        "Product": db_listing.get("Product", ""),
+        "Titel": db_listing.get("Titel", ""),
+        "Bullet1": db_listing.get("Bullet1", ""),
+        "Bullet2": db_listing.get("Bullet2", ""),
+        "Bullet3": db_listing.get("Bullet3", ""),
+        "Bullet4": db_listing.get("Bullet4", ""),
+        "Bullet5": db_listing.get("Bullet5", ""),
+        "Description": db_listing.get("Description", ""),
+        "SearchTerms": db_listing.get("SearchTerms", ""),
+        "Keywords": db_listing.get("Keywords", "")
+    }
+    
+    # Render Listing mit speziellem Index für DB-Listing
+    db_listing_index = 999999  # Hoher Index um Konflikte zu vermeiden
+    edited_listing_data = render_listing(listing_for_render, db_listing_index, has_product=True)
+    
+    # Speichere bearbeitete Daten temporär
+    st.session_state["db_listing_edited"] = edited_listing_data
+    
+    # Speichern-Button
+    st.markdown("---")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.info("💡 Bearbeite das Listing oben und klicke dann auf 'In Datenbank speichern'")
+    with col2:
+        if st.button("💾 In Datenbank speichern", key="btn_save_db_listing", type="primary", use_container_width=True):
+            if db_engine and "db_listing_edited" in st.session_state:
+                edited_data = st.session_state["db_listing_edited"]
+                listing_data = {
+                    "Product": edited_data.get("Product", ""),
+                    "Titel": edited_data.get("Titel", ""),
+                    "Bullet1": edited_data.get("Bullet1", ""),
+                    "Bullet2": edited_data.get("Bullet2", ""),
+                    "Bullet3": edited_data.get("Bullet3", ""),
+                    "Bullet4": edited_data.get("Bullet4", ""),
+                    "Bullet5": edited_data.get("Bullet5", ""),
+                    "Description": edited_data.get("Description", ""),
+                    "SearchTerms": edited_data.get("SearchTerms", ""),
+                    "Keywords": edited_data.get("Keywords", ""),
+                    "name": db_listing.get("name", "")
+                }
+                
+                asin = db_listing.get("asin_ean_sku", "")
+                mp = db_listing.get("mp", "")
+                account = db_listing.get("account") if db_listing.get("account") else None
+                project = db_listing.get("project") if db_listing.get("project") else None
+                
+                if asin and mp:
+                    if save_listing_to_db(db_engine, listing_data, asin, mp, account, project):
+                        st.success("✅ Listing erfolgreich in der Datenbank aktualisiert!")
+                        st.balloons()
+                        # Lösche aus Session State
+                        if "db_listing_for_edit" in st.session_state:
+                            del st.session_state["db_listing_for_edit"]
+                        if "db_listing_edited" in st.session_state:
+                            del st.session_state["db_listing_edited"]
+                        st.rerun()
+                    else:
+                        st.error("❌ Fehler beim Speichern in die Datenbank")
+                else:
+                    st.error("❌ ASIN/EAN/SKU oder MP fehlen")
+    
+    # Abbrechen-Button
+    if st.button("❌ Bearbeitung abbrechen", key="btn_cancel_db_edit"):
+        if "db_listing_for_edit" in st.session_state:
+            del st.session_state["db_listing_for_edit"]
+        if "db_listing_edited" in st.session_state:
+            del st.session_state["db_listing_edited"]
+        st.rerun()
 
 # --- Download (Export) ---
 if updated_rows_all:
