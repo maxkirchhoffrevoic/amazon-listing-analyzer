@@ -993,17 +993,44 @@ if db_engine:
         }
         filters = {k: v for k, v in filters.items() if v}
         
-        if st.button("🔍 Filtern", key="btn_filter"):
-            st.session_state["db_filters"] = filters
+        col_filter_btn, col_reset_btn = st.columns([1, 1])
+        with col_filter_btn:
+            if st.button("🔍 Filtern", key="btn_filter", use_container_width=True):
+                st.session_state["db_filters"] = filters
+                st.rerun()
+        
+        with col_reset_btn:
+            if st.button("🔄 Filter zurücksetzen", key="btn_reset_filters", use_container_width=True):
+                if "db_filters" in st.session_state:
+                    del st.session_state["db_filters"]
+                st.rerun()
         
         if "db_filters" in st.session_state:
             filters = st.session_state["db_filters"]
+        
+        # Debug: Zeige Filter-Status und Gesamtzahl
+        if db_engine:
+            try:
+                with db_engine.connect() as conn:
+                    total_count_result = conn.execute(text("SELECT COUNT(*) as total FROM listings"))
+                    total_count = total_count_result.fetchone()[0]
+                    
+                    if filters:
+                        st.info(f"🔍 **Aktive Filter:** {len(filters)} Filter gesetzt. **Gesamt in DB:** {total_count} Listings")
+                    else:
+                        st.info(f"📊 **Gesamt in Datenbank:** {total_count} Listings")
+            except Exception as e:
+                st.warning(f"⚠️ Konnte Gesamtzahl nicht ermitteln: {e}")
         
         # Lade gefilterte Daten
         db_df = load_listings_from_db(db_engine, filters if filters else None)
         
         if not db_df.empty:
             st.subheader(f"Gefundene Listings ({len(db_df)})")
+            
+            # Debug: Zeige zusätzliche Info wenn Filter aktiv
+            if filters:
+                st.warning(f"⚠️ **Hinweis:** Es werden nur {len(db_df)} Listings angezeigt, da Filter aktiv sind. Gesamt in DB: {total_count if 'total_count' in locals() else 'unbekannt'}")
             
             # Zeige nur relevante Spalten in der Übersicht
             display_cols = ["asin_ean_sku", "mp", "name", "account", "project", "updated_at"]
@@ -1219,11 +1246,31 @@ if db_engine:
                         if show_details_supabase and status_text:
                             status_text.empty()
                         
-                        # Ergebnis anzeigen
+                        # Ergebnis anzeigen mit detaillierten Debug-Infos
+                        st.markdown("### 📊 Upload-Statistik")
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Gesamt verarbeitet", len(upload_df))
+                        with col2:
+                            st.metric("✅ Erfolgreich", success_count, delta=f"{success_count/len(upload_df)*100:.1f}%")
+                        with col3:
+                            st.metric("⏭️ Übersprungen", skipped_count, delta=f"{skipped_count/len(upload_df)*100:.1f}%")
+                        with col4:
+                            st.metric("❌ Fehler", error_count, delta=f"{error_count/len(upload_df)*100:.1f}%")
+                        
+                        # Debug: Prüfe tatsächliche Anzahl in DB nach Upload
+                        if db_engine:
+                            try:
+                                with db_engine.connect() as conn:
+                                    count_after = conn.execute(text("SELECT COUNT(*) FROM listings")).fetchone()[0]
+                                    st.info(f"📊 **Aktuelle Anzahl in Datenbank nach Upload:** {count_after} Listings")
+                            except Exception:
+                                pass
+                        
                         if success_count > 0:
                             st.success(f"✅ **{success_count}** Listings erfolgreich in Supabase gespeichert!")
                         if skipped_count > 0:
-                            st.info(f"⏭️ **{skipped_count}** Listings übersprungen (bereits vorhanden)")
+                            st.info(f"⏭️ **{skipped_count}** Listings übersprungen (bereits vorhanden - gleiche ASIN + MP Kombination)")
                         if error_count > 0:
                             st.warning(f"⚠️ **{error_count}** Listings konnten nicht gespeichert werden")
                             if errors and len(errors) <= 20:
@@ -1647,10 +1694,31 @@ if uploaded_file:
                     if show_details_direct and status_text:
                         status_text.empty()
                     
+                    # Detaillierte Debug-Statistik
+                    st.markdown("### 📊 Upload-Statistik")
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Gesamt verarbeitet", len(df))
+                    with col2:
+                        st.metric("✅ Erfolgreich", success_count, delta=f"{success_count/len(df)*100:.1f}%")
+                    with col3:
+                        st.metric("⏭️ Übersprungen", skipped_count, delta=f"{skipped_count/len(df)*100:.1f}%")
+                    with col4:
+                        st.metric("❌ Fehler", error_count, delta=f"{error_count/len(df)*100:.1f}%")
+                    
+                    # Debug: Prüfe tatsächliche Anzahl in DB nach Upload
+                    if db_engine:
+                        try:
+                            with db_engine.connect() as conn:
+                                count_after = conn.execute(text("SELECT COUNT(*) FROM listings")).fetchone()[0]
+                                st.info(f"📊 **Aktuelle Anzahl in Datenbank nach Upload:** {count_after} Listings")
+                        except Exception:
+                            pass
+                    
                     if success_count > 0:
                         st.success(f"✅ **{success_count}** Listings erfolgreich gespeichert!")
                     if skipped_count > 0:
-                        st.info(f"⏭️ **{skipped_count}** Listings übersprungen")
+                        st.info(f"⏭️ **{skipped_count}** Listings übersprungen (bereits vorhanden - gleiche ASIN + MP Kombination)")
                     if error_count > 0:
                         st.warning(f"⚠️ **{error_count}** Fehler")
                     
