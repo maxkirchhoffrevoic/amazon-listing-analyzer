@@ -1128,8 +1128,8 @@ if db_engine:
                         target_name = "mp"
                     elif col_lower == "name" or col_lower == "produktname":
                         target_name = "name"
-                    elif col_lower == "title":
-                        target_name = "title"
+                    elif col_lower == "title" or col_lower == "titel":
+                        target_name = "Titel"  # Wichtig: "Titel" mit großem T für deutsche Bearbeitungsmaske
                     elif col_lower == "account":
                         target_name = "account"
                     elif col_lower == "project" or col_lower == "projekt":
@@ -1323,7 +1323,7 @@ if db_engine:
                     "asin_ean_sku": ["ASIN / EAN / SKU", "ASIN_EAN_SKU", "asin_ean_sku", "ASIN", "EAN", "SKU"],
                     "mp": ["MP", "mp", "Marketplace", "marketplace"],
                     "name": ["Name", "name", "Produktname", "produktname"],
-                    "title": ["Title", "title"],
+                    "Titel": ["Title", "title", "Titel", "titel"],  # Wichtig: "Titel" mit großem T
                     "account": ["Account", "account"],
                     "project": ["Project", "project", "Projekt", "projekt"]
                 }
@@ -1349,8 +1349,8 @@ if db_engine:
                             target_name = "mp"
                         elif (col_lower == "name" or col_lower == "produktname") and "name" not in used_target_names:
                             target_name = "name"
-                        elif col_lower == "title" and "title" not in used_target_names:
-                            target_name = "title"
+                        elif (col_lower == "title" or col_lower == "titel") and "Titel" not in used_target_names:
+                            target_name = "Titel"  # Wichtig: "Titel" mit großem T für deutsche Bearbeitungsmaske
                         elif col_lower == "account" and "account" not in used_target_names:
                             target_name = "account"
                         elif (col_lower == "project" or col_lower == "projekt") and "project" not in used_target_names:
@@ -1535,6 +1535,16 @@ if uploaded_file:
             has_product = "Product" in df.columns
             expected_cols = ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms","Keywords"]
             cols_lower = [str(c).strip().lower() for c in df.columns]
+
+            # Normalisiere Spaltennamen - mappe "Title" auf "Titel"
+            column_normalization = {}
+            for col in df.columns:
+                col_lower = str(col).strip().lower()
+                if col_lower == "title" and col != "Titel":  # Nur wenn noch nicht "Titel"
+                    column_normalization[col] = "Titel"
+            
+            if column_normalization:
+                df = df.rename(columns=column_normalization)
 
             if ("keywords" in cols_lower) and not any(
                 c in cols_lower for c in ["titel","bullet1","bullet2","bullet3","bullet4","bullet5","description","searchterms","search terms"]
