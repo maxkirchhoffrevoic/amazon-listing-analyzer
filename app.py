@@ -236,6 +236,63 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# ============ PASSWORT-AUTHENTIFIZIERUNG ============
+def check_password():
+    """Gibt True zurück, wenn der Nutzer das richtige Passwort eingegeben hat."""
+    
+    # Prüfe ob bereits eingeloggt
+    if "authenticated" in st.session_state and st.session_state["authenticated"]:
+        return True
+    
+    # Lade Passwort aus secrets oder Umgebungsvariable
+    correct_password = None
+    try:
+        if "app_password" in st.secrets:
+            correct_password = st.secrets["app_password"]
+    except Exception:
+        pass
+    
+    if not correct_password:
+        correct_password = os.getenv("APP_PASSWORD")
+    
+    # Wenn kein Passwort gesetzt ist, erlaube Zugriff (für Entwicklung)
+    if not correct_password:
+        st.warning("⚠️ **Warnung:** Kein Passwort gesetzt. Setze `app_password` in `.streamlit/secrets.toml` oder `APP_PASSWORD` Umgebungsvariable für Produktion!")
+        return True
+    
+    # Login-Formular anzeigen
+    st.title("🔒 Anmeldung erforderlich")
+    st.markdown("Bitte gib das Passwort ein, um auf das Tool zuzugreifen.")
+    
+    password_input = st.text_input(
+        "Passwort",
+        type="password",
+        key="password_input",
+        label_visibility="visible"
+    )
+    
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        login_button = st.button("🔓 Anmelden", type="primary", use_container_width=True)
+    
+    if login_button:
+        if password_input == correct_password:
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("❌ Falsches Passwort!")
+            st.session_state["authenticated"] = False
+    
+    # Footer mit Info
+    st.markdown("---")
+    st.caption("🔒 Geschützter Bereich - Unauthorisierter Zugriff verboten")
+    
+    return False
+
+# Prüfe Authentifizierung - zeige Login-Seite wenn nicht eingeloggt
+if not check_password():
+    st.stop()  # Stoppt die Ausführung, wenn nicht authentifiziert
+
 # ============ MODERNES CSS-DESIGN ============
 st.markdown("""
 <style>
@@ -563,7 +620,14 @@ db_engine = get_db_connection()
 if db_engine:
     init_database(db_engine)
 
-st.title("🛠️ Amazon Listing Editor mit Keyword-Highlighting")
+# Header mit Logout-Button
+col_title, col_logout = st.columns([4, 1])
+with col_title:
+    st.title("🛠️ Amazon Listing Editor mit Keyword-Highlighting")
+with col_logout:
+    if st.button("🚪 Abmelden", key="btn_logout", help="Von der Anwendung abmelden"):
+        st.session_state["authenticated"] = False
+        st.rerun()
 
 # --- Content-Richtlinien & Workflow (ausklappbar) ---
 with st.expander("📋 Content-Richtlinien & Workflow", expanded=False):
