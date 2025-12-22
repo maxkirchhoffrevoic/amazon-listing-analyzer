@@ -39,7 +39,22 @@ def get_db_connection():
         
         # Connection String zusammenbauen
         connection_string = f"postgresql://postgres.povudekejufidhyuinro:{db_password}@aws-1-eu-west-1.pooler.supabase.com:5432/postgres"
-        engine = create_engine(connection_string, pool_pre_ping=True, pool_recycle=300)
+        # Verbesserte Pool-Einstellungen für große Datenmengen
+        engine = create_engine(
+            connection_string,
+            pool_pre_ping=True,  # Prüft Connection vor Verwendung
+            pool_recycle=300,    # Recyclet Connections nach 5 Minuten
+            pool_size=5,         # Anzahl der Connections im Pool
+            max_overflow=10,     # Zusätzliche Connections bei Bedarf
+            pool_timeout=30,     # Timeout für Connection-Erstellung
+            connect_args={
+                "connect_timeout": 10,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5
+            }
+        )
         return engine
     except Exception as e:
         # Fehler nicht anzeigen, nur None zurückgeben (wird später gehandhabt)
@@ -228,6 +243,139 @@ def get_distinct_values(engine, column):
             return [row[0] for row in result.fetchall()]
     except SQLAlchemyError:
         return []
+
+def batch_save_listings_to_db(engine, listings_data, batch_size=100):
+    """
+    Speichert Listings in Batches für bessere Performance und Fehlerbehandlung.
+    
+    Args:
+        engine: SQLAlchemy Engine
+        listings_data: Liste von Dicts mit Listing-Daten
+        batch_size: Anzahl der Listings pro Batch (Standard: 100)
+    
+    Returns:
+        tuple: (success_count, error_count, skipped_count, errors)
+    """
+    if not engine:
+        return 0, len(listings_data), 0, ["Keine Datenbankverbindung"]
+    
+    success_count = 0
+    error_count = 0
+    skipped_count = 0
+    errors = []
+    
+    # Verarbeite in Batches
+    for batch_start in range(0, len(listings_data), batch_size):
+        batch_end = min(batch_start + batch_size, len(listings_data))
+        batch = listings_data[batch_start:batch_end]
+        
+        try:
+            # Eine Connection pro Batch
+            with engine.begin() as conn:
+                for listing_info in batch:
+                    listing_data = listing_info["data"]
+                    asin = listing_info["asin"]
+                    mp = listing_info["mp"]
+                    account = listing_info.get("account")
+                    project = listing_info.get("project")
+                    check_existing = listing_info.get("check_existing", True)
+                    overwrite = listing_info.get("overwrite", False)
+                    
+                    if not asin or not mp:
+                        error_count += 1
+                        errors.append(f"Fehlende ASIN oder MP")
+                        continue
+                    
+                    # Prüfe ob existiert
+                    if check_existing and not overwrite:
+                        check_sql = text("SELECT id FROM listings WHERE asin_ean_sku = :asin AND mp = :mp")
+                        existing = conn.execute(check_sql, {"asin": asin, "mp": mp}).fetchone()
+                        
+                        if existing:
+                            skipped_count += 1
+                            continue
+                        else:
+                            listing_id = None
+                    elif check_existing and overwrite:
+                        check_sql = text("SELECT id FROM listings WHERE asin_ean_sku = :asin AND mp = :mp")
+                        existing = conn.execute(check_sql, {"asin": asin, "mp": mp}).fetchone()
+                        listing_id = existing[0] if existing else None
+                    else:
+                        listing_id = None
+                    
+                    if listing_id:
+                        # Update
+                        update_sql = text("""
+                            UPDATE listings SET
+                                image = :image, name = :name, title = :title,
+                                account = :account, project = :project, product = :product,
+                                titel = :titel, bullet1 = :bullet1, bullet2 = :bullet2,
+                                bullet3 = :bullet3, bullet4 = :bullet4, bullet5 = :bullet5,
+                                description = :description, search_terms = :search_terms,
+                                keywords = :keywords, updated_at = CURRENT_TIMESTAMP
+                            WHERE id = :id
+                        """)
+                        conn.execute(update_sql, {
+                            "id": listing_id,
+                            "image": listing_data.get("image"),
+                            "name": listing_data.get("name"),
+                            "title": listing_data.get("Title") or listing_data.get("title"),
+                            "account": account, "project": project,
+                            "product": listing_data.get("Product", ""),
+                            "titel": listing_data.get("Titel", ""),
+                            "bullet1": listing_data.get("Bullet1", ""),
+                            "bullet2": listing_data.get("Bullet2", ""),
+                            "bullet3": listing_data.get("Bullet3", ""),
+                            "bullet4": listing_data.get("Bullet4", ""),
+                            "bullet5": listing_data.get("Bullet5", ""),
+                            "description": listing_data.get("Description", ""),
+                            "search_terms": listing_data.get("SearchTerms", ""),
+                            "keywords": listing_data.get("Keywords", "")
+                        })
+                        success_count += 1
+                    else:
+                        # Insert
+                        insert_sql = text("""
+                            INSERT INTO listings (
+                                asin_ean_sku, mp, image, name, title, account, project,
+                                product, titel, bullet1, bullet2, bullet3, bullet4, bullet5,
+                                description, search_terms, keywords
+                            ) VALUES (
+                                :asin_ean_sku, :mp, :image, :name, :title, :account, :project,
+                                :product, :titel, :bullet1, :bullet2, :bullet3, :bullet4, :bullet5,
+                                :description, :search_terms, :keywords
+                            )
+                        """)
+                        conn.execute(insert_sql, {
+                            "asin_ean_sku": asin, "mp": mp,
+                            "image": listing_data.get("image"),
+                            "name": listing_data.get("name"),
+                            "title": listing_data.get("Title") or listing_data.get("title"),
+                            "account": account, "project": project,
+                            "product": listing_data.get("Product", ""),
+                            "titel": listing_data.get("Titel", ""),
+                            "bullet1": listing_data.get("Bullet1", ""),
+                            "bullet2": listing_data.get("Bullet2", ""),
+                            "bullet3": listing_data.get("Bullet3", ""),
+                            "bullet4": listing_data.get("Bullet4", ""),
+                            "bullet5": listing_data.get("Bullet5", ""),
+                            "description": listing_data.get("Description", ""),
+                            "search_terms": listing_data.get("SearchTerms", ""),
+                            "keywords": listing_data.get("Keywords", "")
+                        })
+                        success_count += 1
+                
+                # Commit erfolgt automatisch durch engine.begin() context manager
+        
+        except Exception as batch_error:
+            # Fehler bei diesem Batch
+            error_count += len(batch)
+            error_msg = str(batch_error)[:200]
+            errors.append(f"Batch {batch_start//batch_size + 1} (Zeilen {batch_start + 1}-{batch_end}): {error_msg}")
+            # Weiter mit nächstem Batch
+            continue
+    
+    return success_count, error_count, skipped_count, errors
 
 st.set_page_config(
     page_title="Amazon Listing Editor",
@@ -1244,36 +1392,21 @@ if db_engine:
                         )
                     
                     if st.button("💾 In Supabase speichern", key="btn_supabase_save", type="primary"):
-                        success_count = 0
-                        error_count = 0
-                        skipped_count = 0
-                        errors = []
+                        # Bereite Daten für Batch-Upload vor
+                        listings_to_save = []
                         
                         if show_details_supabase:
                             progress_bar = st.progress(0)
                             status_text = st.empty()
+                            status_text.text("Bereite Daten vor...")
                         else:
                             progress_bar = None
                             status_text = None
                         
+                        # Sammle alle Listings
                         for idx, row in upload_df.iterrows():
-                            if show_details_supabase and status_text:
-                                status_text.text(f"Verarbeite Zeile {idx + 1} von {len(upload_df)}...")
                             if show_details_supabase and progress_bar:
-                                progress_bar.progress((idx + 1) / len(upload_df))
-                            
-                            # Prüfe ob Eintrag existiert (wenn nicht überschreiben)
-                            if not overwrite_existing_supabase:
-                                check_sql = text("SELECT id FROM listings WHERE asin_ean_sku = :asin AND mp = :mp")
-                                with db_engine.connect() as conn:
-                                    result = conn.execute(check_sql, {
-                                        "asin": str(row.get("asin_ean_sku", "")).strip(),
-                                        "mp": str(row.get("mp", "")).strip()
-                                    }).fetchone()
-                                
-                                if result:
-                                    skipped_count += 1
-                                    continue
+                                progress_bar.progress((idx + 1) / len(upload_df) * 0.5)  # 50% für Vorbereitung
                             
                             listing_data = {
                                 "Product": str(row.get("Product", "")),
@@ -1296,14 +1429,28 @@ if db_engine:
                             project = str(row.get("project", "")).strip() if "project" in row and pd.notna(row.get("project")) else None
                             
                             if asin and mp:
-                                if save_listing_to_db(db_engine, listing_data, asin, mp, account, project):
-                                    success_count += 1
-                                else:
-                                    error_count += 1
-                                    errors.append(f"Zeile {idx + 1}: {asin} / {mp}")
-                            else:
-                                error_count += 1
-                                errors.append(f"Zeile {idx + 1}: Fehlende ASIN oder MP")
+                                listings_to_save.append({
+                                    "data": listing_data,
+                                    "asin": asin,
+                                    "mp": mp,
+                                    "account": account,
+                                    "project": project,
+                                    "check_existing": True,
+                                    "overwrite": overwrite_existing_supabase
+                                })
+                        
+                        # Batch-Upload durchführen
+                        if show_details_supabase and status_text:
+                            status_text.text(f"Speichere {len(listings_to_save)} Listings in Batches...")
+                        
+                        success_count, error_count, skipped_count, errors = batch_save_listings_to_db(
+                            db_engine, 
+                            listings_to_save, 
+                            batch_size=100
+                        )
+                        
+                        if show_details_supabase and progress_bar:
+                            progress_bar.progress(1.0)  # 100% fertig
                         
                         if show_details_supabase and progress_bar:
                             progress_bar.empty()
@@ -1720,24 +1867,17 @@ if uploaded_file:
                         progress_bar = st.progress(0)
                         status_text = st.empty()
                     
+                    # Bereite Daten für Batch-Upload vor
+                    listings_to_save = []
+                    
+                    if show_details_direct and status_text:
+                        status_text.text("Bereite Daten vor...")
+                    if show_details_direct and progress_bar:
+                        progress_bar.progress(0.1)
+                    
                     for idx, row in df.iterrows():
-                        if show_details_direct and status_text:
-                            status_text.text(f"Verarbeite Zeile {idx + 1} von {len(df)}...")
                         if show_details_direct and progress_bar:
-                            progress_bar.progress((idx + 1) / len(df))
-                        
-                        # Prüfe ob existiert
-                        if not overwrite_direct:
-                            check_sql = text("SELECT id FROM listings WHERE asin_ean_sku = :asin AND mp = :mp")
-                            with db_engine.connect() as conn:
-                                result = conn.execute(check_sql, {
-                                    "asin": str(row[asin_cols[0]]).strip() if pd.notna(row[asin_cols[0]]) else "",
-                                    "mp": str(row[mp_cols[0]]).strip() if pd.notna(row[mp_cols[0]]) else ""
-                                }).fetchone()
-                            
-                            if result:
-                                skipped_count += 1
-                                continue
+                            progress_bar.progress((idx + 1) / len(df) * 0.5)  # 50% für Vorbereitung
                         
                         listing_data = {
                             "Product": str(row.get("Product", "")),
@@ -1758,10 +1898,30 @@ if uploaded_file:
                         project = str(row.get("Project", "")).strip() if "Project" in row and pd.notna(row.get("Project")) else None
                         
                         if asin and mp:
-                            if save_listing_to_db(db_engine, listing_data, asin, mp, account, project):
-                                success_count += 1
-                            else:
-                                error_count += 1
+                            listings_to_save.append({
+                                "data": listing_data,
+                                "asin": asin,
+                                "mp": mp,
+                                "account": account,
+                                "project": project,
+                                "check_existing": True,
+                                "overwrite": overwrite_direct
+                            })
+                    
+                    # Batch-Upload durchführen
+                    if show_details_direct and status_text:
+                        status_text.text(f"Speichere {len(listings_to_save)} Listings in Batches...")
+                    
+                    success_count, error_count, skipped_count, batch_errors = batch_save_listings_to_db(
+                        db_engine,
+                        listings_to_save,
+                        batch_size=100
+                    )
+                    
+                    errors = batch_errors if 'errors' not in locals() else errors + batch_errors
+                    
+                    if show_details_direct and progress_bar:
+                        progress_bar.progress(1.0)
                     
                     if show_details_direct and progress_bar:
                         progress_bar.empty()
