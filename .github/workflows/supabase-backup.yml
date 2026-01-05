@@ -26,6 +26,7 @@ jobs:
         run: |
           BACKUP_FILE="supabase-$(date +%Y%m%d-%H%M%S).sql"
           pg_dump \
+            -4 \
             --host="${{ secrets.PGHOST }}" \
             --port=6543 \
             --username="${{ secrets.PGUSER }}" \
