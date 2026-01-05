@@ -25,9 +25,15 @@ jobs:
         id: backup
         run: |
           BACKUP_FILE="supabase-$(date +%Y%m%d-%H%M%S).sql"
+          # IPv4-Adresse auflösen (nur erste IPv4-Adresse)
+          PGHOST_IPV4=$(getent hosts "${{ secrets.PGHOST }}" | awk '{print $1}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+          if [ -z "$PGHOST_IPV4" ]; then
+            echo "Fehler: Konnte keine IPv4-Adresse für ${{ secrets.PGHOST }} auflösen"
+            exit 1
+          fi
+          echo "Verwende IPv4-Adresse: $PGHOST_IPV4"
           pg_dump \
-            -4 \
-            --host="${{ secrets.PGHOST }}" \
+            --host="$PGHOST_IPV4" \
             --port=6543 \
             --username="${{ secrets.PGUSER }}" \
             --dbname="${{ secrets.PGDATABASE }}" \
