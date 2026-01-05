@@ -25,13 +25,26 @@ jobs:
         id: backup
         run: |
           BACKUP_FILE="supabase-$(date +%Y%m%d-%H%M%S).sql"
-          # IPv4-Adresse auflösen (nur erste IPv4-Adresse)
-          PGHOST_IPV4=$(getent hosts "${{ secrets.PGHOST }}" | awk '{print $1}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
-          if [ -z "$PGHOST_IPV4" ]; then
-            echo "Fehler: Konnte keine IPv4-Adresse für ${{ secrets.PGHOST }} auflösen"
-            exit 1
+          PGHOST="${{ secrets.PGHOST }}"
+          # Prüfen ob bereits eine IPv4-Adresse
+          if [[ "$PGHOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            PGHOST_IPV4="$PGHOST"
+            echo "Hostname ist bereits eine IPv4-Adresse: $PGHOST_IPV4"
+          else
+            # IPv4-Adresse auflösen mit dig (nur A-Records, keine AAAA)
+            PGHOST_IPV4=$(dig +short "$PGHOST" A | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+            if [ -z "$PGHOST_IPV4" ]; then
+              # Fallback: host verwenden
+              PGHOST_IPV4=$(host "$PGHOST" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)
+            fi
+            if [ -z "$PGHOST_IPV4" ]; then
+              echo "Fehler: Konnte keine IPv4-Adresse für $PGHOST auflösen"
+              echo "Versuche direkte Verbindung mit Hostname..."
+              PGHOST_IPV4="$PGHOST"
+            else
+              echo "Aufgelöste IPv4-Adresse: $PGHOST_IPV4"
+            fi
           fi
-          echo "Verwende IPv4-Adresse: $PGHOST_IPV4"
           pg_dump \
             --host="$PGHOST_IPV4" \
             --port=6543 \
