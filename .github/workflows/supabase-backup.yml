@@ -15,7 +15,7 @@ jobs:
       - name: Postgres Client 17 installieren
         run: |
           sudo apt-get update
-          sudo apt-get install -y lsb-release wget
+          sudo apt-get install -y lsb-release wget dnsutils
           sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
           sudo apt-get update
@@ -39,12 +39,12 @@ jobs:
             fi
             if [ -z "$PGHOST_IPV4" ]; then
               echo "Fehler: Konnte keine IPv4-Adresse für $PGHOST auflösen"
-              echo "Versuche direkte Verbindung mit Hostname..."
-              PGHOST_IPV4="$PGHOST"
-            else
-              echo "Aufgelöste IPv4-Adresse: $PGHOST_IPV4"
+              exit 1
             fi
+            echo "Aufgelöste IPv4-Adresse: $PGHOST_IPV4"
           fi
+          # IPv6 deaktivieren für diese Session
+          export PGHOSTADDR="$PGHOST_IPV4"
           pg_dump \
             --host="$PGHOST_IPV4" \
             --port=6543 \
