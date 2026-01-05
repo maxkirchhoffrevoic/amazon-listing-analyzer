@@ -26,25 +26,53 @@ jobs:
         run: |
           BACKUP_FILE="supabase-$(date +%Y%m%d-%H%M%S).sql"
           PGHOST="${{ secrets.PGHOST }}"
+          
+          # Debug: Prüfen ob Secret gesetzt ist (ohne Wert zu zeigen)
+          if [ -z "$PGHOST" ]; then
+            echo "FEHLER: PGHOST Secret ist leer oder nicht gesetzt!"
+            exit 1
+          fi
+          echo "PGHOST Secret ist gesetzt (Länge: ${#PGHOST} Zeichen)"
+          
+          # Hostname bereinigen (falls Connection String oder URL)
+          # Entferne Protokoll-Präfixe falls vorhanden
+          PGHOST=$(echo "$PGHOST" | sed 's|^https\?://||' | sed 's|^postgres://||' | sed 's|^postgresql://||')
+          # Entferne Port falls vorhanden
+          PGHOST=$(echo "$PGHOST" | cut -d: -f1)
+          # Entferne Pfad falls vorhanden
+          PGHOST=$(echo "$PGHOST" | cut -d/ -f1)
+          
+          echo "Bereinigter Hostname: $PGHOST"
+          
           # Prüfen ob bereits eine IPv4-Adresse
           if [[ "$PGHOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             PGHOST_IPV4="$PGHOST"
             echo "Hostname ist bereits eine IPv4-Adresse: $PGHOST_IPV4"
           else
+            echo "Versuche DNS-Auflösung für: $PGHOST"
             # IPv4-Adresse auflösen mit dig (nur A-Records, keine AAAA)
+            echo "dig Ausgabe:"
+            dig +short "$PGHOST" A || echo "dig fehlgeschlagen"
             PGHOST_IPV4=$(dig +short "$PGHOST" A | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
             if [ -z "$PGHOST_IPV4" ]; then
-              # Fallback: host verwenden
-              PGHOST_IPV4=$(host "$PGHOST" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)
+              echo "dig konnte keine IPv4-Adresse finden, versuche host..."
+              echo "host Ausgabe:"
+              host "$PGHOST" || echo "host fehlgeschlagen"
+              PGHOST_IPV4=$(host "$PGHOST" 2>/dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)
             fi
             if [ -z "$PGHOST_IPV4" ]; then
-              echo "Fehler: Konnte keine IPv4-Adresse für $PGHOST auflösen"
+              echo "FEHLER: Konnte keine IPv4-Adresse für $PGHOST auflösen"
+              echo "Bitte prüfe:"
+              echo "1. Ist PGHOST Secret korrekt gesetzt? (sollte nur der Hostname sein, z.B. db.xxxxx.supabase.co)"
+              echo "2. Enthält der Secret vielleicht einen vollständigen Connection String?"
+              echo "3. Ist der Hostname erreichbar?"
               exit 1
             fi
             echo "Aufgelöste IPv4-Adresse: $PGHOST_IPV4"
           fi
           # IPv6 deaktivieren für diese Session
           export PGHOSTADDR="$PGHOST_IPV4"
+          echo "Verwende PGHOSTADDR=$PGHOSTADDR"
           pg_dump \
             --host="$PGHOST_IPV4" \
             --port=6543 \
