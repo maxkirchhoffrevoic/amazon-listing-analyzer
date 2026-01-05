@@ -2,7 +2,7 @@ name: Supabase Backup
 
 on:
   schedule:
-    - cron: "0 2 * * *"       # täglich um 02:00 UTC
+    - cron: "0 7 * * 1"       # wöchentlich jeden Montag um 07:00 UTC
   workflow_dispatch:          # manuell startbar
 
 jobs:
