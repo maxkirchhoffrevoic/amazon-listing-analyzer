@@ -1,0 +1,65 @@
+name: Supabase Backup
+
+on:
+  schedule:
+    - cron: "0 2 * * *"       # täglich um 02:00 UTC
+  workflow_dispatch:          # manuell startbar
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repo klonen
+        uses: actions/checkout@v4
+
+      - name: Postgres Client 17 installieren
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lsb-release wget
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      - name: pg_dump ausführen
+        id: backup
+        run: |
+          BACKUP_FILE="supabase-$(date +%Y%m%d-%H%M%S).sql"
+          pg_dump \
+            --host="${{ secrets.PGHOST }}" \
+            --port=6543 \
+            --username="${{ secrets.PGUSER }}" \
+            --dbname="${{ secrets.PGDATABASE }}" \
+            --format=plain \
+            --no-owner \
+            --file "$BACKUP_FILE"
+          echo "backup_file=$BACKUP_FILE" >> $GITHUB_OUTPUT
+          echo "BACKUP_FILE=$BACKUP_FILE" >> $GITHUB_ENV
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Artifact hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup
+          path: ${{ steps.backup.outputs.backup_file }}
+
+      - name: rclone installieren
+        run: |
+          curl https://rclone.org/install.sh | sudo bash
+
+      - name: rclone konfigurieren
+        env:
+          SERVICE_JSON: ${{ secrets.SERVICE_JSON }}
+        run: |
+          echo "$SERVICE_JSON" > service-account.json
+          python3 -m json.tool service-account.json > /dev/null || (echo "Fehler: Ungültiges JSON!" && exit 1)
+          echo "[gdrive]" > rclone.conf
+          echo "type = drive" >> rclone.conf
+          echo "scope = drive.file" >> rclone.conf
+          echo "service_account_file = $PWD/service-account.json" >> rclone.conf
+          echo "root_folder_id = ${{ secrets.GDRIVE_FOLDER_ID }}" >> rclone.conf
+
+      - name: Backup nach Google Drive kopieren
+        run: |
+          rclone --config="$PWD/rclone.conf" copy "$BACKUP_FILE" "gdrive:/"
