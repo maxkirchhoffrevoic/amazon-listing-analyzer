@@ -1280,8 +1280,12 @@ if db_engine:
                     
                     # Button zum Laden in Bearbeitungsmaske
                     if st.button("✏️ In Bearbeitungsmaske laden", key="btn_load_to_editor", type="primary"):
-                        # Initialisiere Liste falls nicht vorhanden
+                        # Initialisiere Liste falls nicht vorhanden - stelle sicher, dass es eine Liste ist
                         if "db_listings_for_edit" not in st.session_state:
+                            st.session_state["db_listings_for_edit"] = []
+                        
+                        # Stelle sicher, dass es wirklich eine Liste ist (nicht None oder etwas anderes)
+                        if not isinstance(st.session_state["db_listings_for_edit"], list):
                             st.session_state["db_listings_for_edit"] = []
                         
                         # Erstelle neues Listing-Objekt mit eindeutiger ID
@@ -1305,6 +1309,7 @@ if db_engine:
                         }
                         
                         # Prüfe ob Listing bereits geladen ist (basierend auf ASIN + MP)
+                        # Aber erlaube das Laden, wenn es eine andere ASIN/MP Kombination ist
                         listing_exists = any(
                             listing.get("asin_ean_sku") == new_listing["asin_ean_sku"] and 
                             listing.get("mp") == new_listing["mp"]
@@ -1314,8 +1319,12 @@ if db_engine:
                         if listing_exists:
                             st.warning("⚠️ Dieses Listing ist bereits in der Bearbeitungsmaske geladen.")
                         else:
-                            st.session_state["db_listings_for_edit"].append(new_listing)
-                            st.success("✅ Listing in Bearbeitungsmaske geladen! Scrolle nach unten zur Bearbeitung.")
+                            # Füge neues Listing zur Liste hinzu - erstelle eine neue Liste um sicherzustellen, dass Streamlit die Änderung erkennt
+                            current_listings = list(st.session_state["db_listings_for_edit"])
+                            current_listings.append(new_listing)
+                            st.session_state["db_listings_for_edit"] = current_listings
+                            # Debug: Zeige Anzahl der Listings
+                            st.success(f"✅ Listing in Bearbeitungsmaske geladen! ({len(current_listings)} Listing(s) in Bearbeitung)")
                         st.rerun()
         else:
             st.info("Keine Listings gefunden. Verwende die Filter oder lade Optimierungen hoch.")
