@@ -1680,12 +1680,23 @@ if "show_edit_interface" not in st.session_state:
 
 updated_rows_all = []  # Sammelbecken für Upload-Listings + generierte Listings
 
-def render_listing(row, i, has_product, listing_id=None):
+def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
     """Rendert ein Listing-Panel und gibt das (ggf. bearbeitete) Dict zurück."""
     # Verwende listing_id für eindeutige Keys, falls vorhanden, sonst Index
     key_suffix = listing_id if listing_id else str(i)
     
-    default_name = (str(row.get("Product", "")).strip() if has_product else "") or f"Listing {i+1}"
+    # Generiere default_name - verwende Product falls vorhanden, sonst einen beschreibenden Namen
+    product_value = str(row.get("Product", "")).strip()
+    if product_value:
+        default_name = product_value
+    elif listing_id:
+        # Für DB-Listings: Verwende ASIN oder einen beschreibenden Namen basierend auf listing_id
+        # Extrahiere einen kurzen Teil der UUID für einen lesbaren Namen
+        short_id = listing_id.replace("-", "")[:8] if listing_id else str(i)
+        default_name = f"Listing {short_id}"
+    else:
+        default_name = f"Listing {i+1}"
+    
     if f"product_{key_suffix}" not in st.session_state:
         st.session_state[f"product_{key_suffix}"] = default_name
     listing_label = st.session_state[f"product_{key_suffix}"]
@@ -1695,7 +1706,14 @@ def render_listing(row, i, has_product, listing_id=None):
     if open_key not in st.session_state:
         st.session_state[open_key] = False
 
-    with st.expander(f"📦 {listing_label} – einklappen/ausklappen", expanded=st.session_state[open_key]):
+    # Wenn skip_expander=True, rendere ohne Expander (für DB-Listings, die bereits in einem Expander sind)
+    if skip_expander:
+        # Rendere direkt ohne Expander
+        content_container = st.container()
+    else:
+        content_container = st.expander(f"📦 {listing_label} – einklappen/ausklappen", expanded=st.session_state[open_key])
+    
+    with content_container:
         col1, col2 = st.columns([1, 3])
 
         with col1:
@@ -2051,8 +2069,10 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                     st.rerun()
             
             # Konvertiere zu Format für render_listing (ohne Metadaten)
+            # Verwende 'name' als Product, falls Product leer ist
+            product_name = db_listing.get("Product", "") or db_listing.get("name", "") or f"Listing {db_listing.get('asin_ean_sku', 'Unbekannt')}"
             listing_for_render = {
-                "Product": db_listing.get("Product", ""),
+                "Product": product_name,
                 "Titel": db_listing.get("Titel", ""),
                 "Bullet1": db_listing.get("Bullet1", ""),
                 "Bullet2": db_listing.get("Bullet2", ""),
@@ -2077,7 +2097,8 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
             
             # Wichtig: Verwende listing_id als Präfix für alle Keys, um Eindeutigkeit sicherzustellen
             # Passe render_listing an, um listing_id zu verwenden
-            edited_listing_data = render_listing(listing_for_render, db_listing_index, has_product=True, listing_id=listing_id)
+            # skip_expander=True, da wir bereits in einem Expander sind
+            edited_listing_data = render_listing(listing_for_render, db_listing_index, has_product=True, listing_id=listing_id, skip_expander=True)
             
             # Speichere bearbeitete Daten
             st.session_state["db_listings_edited"][listing_id] = {
