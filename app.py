@@ -1680,15 +1680,18 @@ if "show_edit_interface" not in st.session_state:
 
 updated_rows_all = []  # Sammelbecken für Upload-Listings + generierte Listings
 
-def render_listing(row, i, has_product):
+def render_listing(row, i, has_product, listing_id=None):
     """Rendert ein Listing-Panel und gibt das (ggf. bearbeitete) Dict zurück."""
+    # Verwende listing_id für eindeutige Keys, falls vorhanden, sonst Index
+    key_suffix = listing_id if listing_id else str(i)
+    
     default_name = (str(row.get("Product", "")).strip() if has_product else "") or f"Listing {i+1}"
-    if f"product_{i}" not in st.session_state:
-        st.session_state[f"product_{i}"] = default_name
-    listing_label = st.session_state[f"product_{i}"]
+    if f"product_{key_suffix}" not in st.session_state:
+        st.session_state[f"product_{key_suffix}"] = default_name
+    listing_label = st.session_state[f"product_{key_suffix}"]
 
     # Expander-Open-State je Listing
-    open_key = f"exp_open_{i}"
+    open_key = f"exp_open_{key_suffix}"
     if open_key not in st.session_state:
         st.session_state[open_key] = False
 
@@ -1702,20 +1705,20 @@ def render_listing(row, i, has_product):
 
             st.text_input(
                 "Listing-Name (Product)",
-                value=st.session_state[f"product_{i}"],
-                key=f"product_{i}",
+                value=st.session_state[f"product_{key_suffix}"],
+                key=f"product_{key_suffix}",
                 on_change=_keep_open_expander
             )
 
-            st.markdown(f"### ✏️ Keywords für {st.session_state[f'product_{i}']}")
+            st.markdown(f"### ✏️ Keywords für {st.session_state[f'product_{key_suffix}']}")
             keywords_raw = str(row.get("Keywords", ""))
-            keywords_input = st.text_area("Keywords (Komma oder Zeilenumbruch)", value=keywords_raw, key=f"kw_input_{i}")
+            keywords_input = st.text_area("Keywords (Komma oder Zeilenumbruch)", value=keywords_raw, key=f"kw_input_{key_suffix}")
             keywords = [kw.strip() for kw in re.split(r"[,\n]", keywords_input) if kw.strip()]
 
         with col2:
             def render_field(field_name, limit):
                 st.markdown(f"<div class='field-label'>{field_name}</div>", unsafe_allow_html=True)
-                value = st.text_area(field_name, value=str(row.get(field_name, "")), key=f"{field_name}_{i}", label_visibility="collapsed", height=90)
+                value = st.text_area(field_name, value=str(row.get(field_name, "")), key=f"{field_name}_{key_suffix}", label_visibility="collapsed", height=90)
                 blen = byte_length(value)
                 is_over = blen > limit
                 percentage = min((blen / limit) * 100, 100)
@@ -1741,7 +1744,7 @@ def render_listing(row, i, has_product):
             for fname, lim in limits.items():
                 listing_data[fname] = render_field(fname, lim)
             listing_data["Keywords"] = keywords_input
-            listing_data["Product"] = st.session_state.get(f"product_{i}", default_name)
+            listing_data["Product"] = st.session_state.get(f"product_{key_suffix}", default_name)
 
         # Live-Keyword-Chips (links), basierend auf aktuellem Content
         all_text = " ".join(
@@ -2062,9 +2065,19 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
             }
             
             # Render Listing mit eindeutigem Index basierend auf ID
-            # Verwende Hash der ID für einen stabilen Index
-            db_listing_index = hash(listing_id) % 1000000  # Modulo um Index zu begrenzen
-            edited_listing_data = render_listing(listing_for_render, db_listing_index, has_product=True)
+            # Konvertiere UUID zu einem eindeutigen numerischen Index
+            # Verwende die ersten 8 Zeichen der UUID als Hexadezimalzahl für einen stabilen, eindeutigen Index
+            try:
+                # Entferne Bindestriche und nimm erste 8 Zeichen, konvertiere zu int
+                uuid_clean = listing_id.replace("-", "")[:8]
+                db_listing_index = int(uuid_clean, 16) % 10000000  # Modulo um Index zu begrenzen, aber groß genug für Eindeutigkeit
+            except (ValueError, AttributeError):
+                # Fallback: Verwende Hash wenn UUID-Konvertierung fehlschlägt
+                db_listing_index = abs(hash(listing_id)) % 10000000
+            
+            # Wichtig: Verwende listing_id als Präfix für alle Keys, um Eindeutigkeit sicherzustellen
+            # Passe render_listing an, um listing_id zu verwenden
+            edited_listing_data = render_listing(listing_for_render, db_listing_index, has_product=True, listing_id=listing_id)
             
             # Speichere bearbeitete Daten
             st.session_state["db_listings_edited"][listing_id] = {
