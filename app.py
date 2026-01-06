@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 import json
+import uuid
 from io import BytesIO
 import os
 from datetime import datetime
@@ -1279,8 +1280,13 @@ if db_engine:
                     
                     # Button zum Laden in Bearbeitungsmaske
                     if st.button("✏️ In Bearbeitungsmaske laden", key="btn_load_to_editor", type="primary"):
-                        # Speichere Listing-Daten im Session State für Bearbeitung
-                        st.session_state["db_listing_for_edit"] = {
+                        # Initialisiere Liste falls nicht vorhanden
+                        if "db_listings_for_edit" not in st.session_state:
+                            st.session_state["db_listings_for_edit"] = []
+                        
+                        # Erstelle neues Listing-Objekt mit eindeutiger ID
+                        new_listing = {
+                            "id": str(uuid.uuid4()),  # Eindeutige ID für jedes Listing
                             "Product": selected_row.get("product", ""),
                             "Titel": selected_row.get("titel", ""),
                             "Bullet1": selected_row.get("bullet1", ""),
@@ -1297,7 +1303,19 @@ if db_engine:
                             "project": selected_row.get("project", ""),
                             "name": selected_row.get("name", "")
                         }
-                        st.success("✅ Listing in Bearbeitungsmaske geladen! Scrolle nach unten zur Bearbeitung.")
+                        
+                        # Prüfe ob Listing bereits geladen ist (basierend auf ASIN + MP)
+                        listing_exists = any(
+                            listing.get("asin_ean_sku") == new_listing["asin_ean_sku"] and 
+                            listing.get("mp") == new_listing["mp"]
+                            for listing in st.session_state["db_listings_for_edit"]
+                        )
+                        
+                        if listing_exists:
+                            st.warning("⚠️ Dieses Listing ist bereits in der Bearbeitungsmaske geladen.")
+                        else:
+                            st.session_state["db_listings_for_edit"].append(new_listing)
+                            st.success("✅ Listing in Bearbeitungsmaske geladen! Scrolle nach unten zur Bearbeitung.")
                         st.rerun()
         else:
             st.info("Keine Listings gefunden. Verwende die Filter oder lade Optimierungen hoch.")
@@ -1980,94 +1998,195 @@ if st.session_state["generated_rows"]:
         listing_data = render_listing(row, start_index + j, has_product=("Product" in row))
         updated_rows_all.append(listing_data)
 
-# ---- 3) Listing aus Datenbank zum Bearbeiten laden ----
-if "db_listing_for_edit" in st.session_state and st.session_state["db_listing_for_edit"]:
+# ---- 3) Listings aus Datenbank zum Bearbeiten laden ----
+if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listings_for_edit"]) > 0:
     st.markdown("---")
-    st.header("✏️ Listing aus Datenbank bearbeiten")
+    st.header("✏️ Listings aus Datenbank bearbeiten")
+    st.info(f"📊 {len(st.session_state['db_listings_for_edit'])} Listing(s) in Bearbeitung")
     
-    db_listing = st.session_state["db_listing_for_edit"]
+    # Initialisiere bearbeitete Daten falls nicht vorhanden
+    if "db_listings_edited" not in st.session_state:
+        st.session_state["db_listings_edited"] = {}
     
-    # Metadaten anzeigen
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.info(f"**ASIN/EAN/SKU:** {db_listing.get('asin_ean_sku', 'N/A')}")
-    with col2:
-        st.info(f"**Marketplace:** {db_listing.get('mp', 'N/A')}")
-    with col3:
-        st.info(f"**Account:** {db_listing.get('account', 'N/A')}")
-    with col4:
-        st.info(f"**Project:** {db_listing.get('project', 'N/A')}")
+    # Rendere jedes Listing in einem eigenen Expander
+    for idx, db_listing in enumerate(st.session_state["db_listings_for_edit"]):
+        listing_id = db_listing.get("id", str(idx))
+        
+        # Metadaten für Expander-Header
+        listing_label = f"{db_listing.get('name', 'Unbekannt')} - {db_listing.get('asin_ean_sku', 'N/A')} ({db_listing.get('mp', 'N/A')})"
+        
+        with st.expander(f"📦 {listing_label}", expanded=True):
+            # Metadaten anzeigen
+            col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
+            with col1:
+                st.info(f"**ASIN/EAN/SKU:** {db_listing.get('asin_ean_sku', 'N/A')}")
+            with col2:
+                st.info(f"**MP:** {db_listing.get('mp', 'N/A')}")
+            with col3:
+                st.info(f"**Account:** {db_listing.get('account', 'N/A')}")
+            with col4:
+                st.info(f"**Project:** {db_listing.get('project', 'N/A')}")
+            with col5:
+                # Button zum Entfernen
+                if st.button("🗑️ Entfernen", key=f"btn_remove_{listing_id}", type="secondary", use_container_width=True):
+                    st.session_state["db_listings_for_edit"] = [
+                        l for l in st.session_state["db_listings_for_edit"] 
+                        if l.get("id") != listing_id
+                    ]
+                    # Entferne auch bearbeitete Daten
+                    if listing_id in st.session_state.get("db_listings_edited", {}):
+                        del st.session_state["db_listings_edited"][listing_id]
+                    st.rerun()
+            
+            # Konvertiere zu Format für render_listing (ohne Metadaten)
+            listing_for_render = {
+                "Product": db_listing.get("Product", ""),
+                "Titel": db_listing.get("Titel", ""),
+                "Bullet1": db_listing.get("Bullet1", ""),
+                "Bullet2": db_listing.get("Bullet2", ""),
+                "Bullet3": db_listing.get("Bullet3", ""),
+                "Bullet4": db_listing.get("Bullet4", ""),
+                "Bullet5": db_listing.get("Bullet5", ""),
+                "Description": db_listing.get("Description", ""),
+                "SearchTerms": db_listing.get("SearchTerms", ""),
+                "Keywords": db_listing.get("Keywords", "")
+            }
+            
+            # Render Listing mit eindeutigem Index basierend auf ID
+            # Verwende Hash der ID für einen stabilen Index
+            db_listing_index = hash(listing_id) % 1000000  # Modulo um Index zu begrenzen
+            edited_listing_data = render_listing(listing_for_render, db_listing_index, has_product=True)
+            
+            # Speichere bearbeitete Daten
+            st.session_state["db_listings_edited"][listing_id] = {
+                "data": edited_listing_data,
+                "original": db_listing
+            }
     
-    # Konvertiere zu Format für render_listing (ohne Metadaten)
-    listing_for_render = {
-        "Product": db_listing.get("Product", ""),
-        "Titel": db_listing.get("Titel", ""),
-        "Bullet1": db_listing.get("Bullet1", ""),
-        "Bullet2": db_listing.get("Bullet2", ""),
-        "Bullet3": db_listing.get("Bullet3", ""),
-        "Bullet4": db_listing.get("Bullet4", ""),
-        "Bullet5": db_listing.get("Bullet5", ""),
-        "Description": db_listing.get("Description", ""),
-        "SearchTerms": db_listing.get("SearchTerms", ""),
-        "Keywords": db_listing.get("Keywords", "")
-    }
-    
-    # Render Listing mit speziellem Index für DB-Listing
-    db_listing_index = 999999  # Hoher Index um Konflikte zu vermeiden
-    edited_listing_data = render_listing(listing_for_render, db_listing_index, has_product=True)
-    
-    # Speichere bearbeitete Daten temporär
-    st.session_state["db_listing_edited"] = edited_listing_data
-    
-    # Speichern-Button
+    # Speichern-Bereich
     st.markdown("---")
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.info("💡 Bearbeite das Listing oben und klicke dann auf 'In Datenbank speichern'")
-    with col2:
-        if st.button("💾 In Datenbank speichern", key="btn_save_db_listing", type="primary", use_container_width=True):
-            if db_engine and "db_listing_edited" in st.session_state:
-                edited_data = st.session_state["db_listing_edited"]
-                listing_data = {
-                    "Product": edited_data.get("Product", ""),
-                    "Titel": edited_data.get("Titel", ""),
-                    "Bullet1": edited_data.get("Bullet1", ""),
-                    "Bullet2": edited_data.get("Bullet2", ""),
-                    "Bullet3": edited_data.get("Bullet3", ""),
-                    "Bullet4": edited_data.get("Bullet4", ""),
-                    "Bullet5": edited_data.get("Bullet5", ""),
-                    "Description": edited_data.get("Description", ""),
-                    "SearchTerms": edited_data.get("SearchTerms", ""),
-                    "Keywords": edited_data.get("Keywords", ""),
-                    "name": db_listing.get("name", "")
-                }
-                
-                asin = db_listing.get("asin_ean_sku", "")
-                mp = db_listing.get("mp", "")
-                account = db_listing.get("account") if db_listing.get("account") else None
-                project = db_listing.get("project") if db_listing.get("project") else None
-                
-                if asin and mp:
-                    if save_listing_to_db(db_engine, listing_data, asin, mp, account, project):
-                        st.success("✅ Listing erfolgreich in der Datenbank aktualisiert!")
-                        st.balloons()
-                        # Lösche aus Session State
-                        if "db_listing_for_edit" in st.session_state:
-                            del st.session_state["db_listing_for_edit"]
-                        if "db_listing_edited" in st.session_state:
-                            del st.session_state["db_listing_edited"]
-                        st.rerun()
-                    else:
-                        st.error("❌ Fehler beim Speichern in die Datenbank")
+    st.subheader("💾 Listings in Datenbank speichern")
+    
+    if db_engine:
+        # Auswahl welche Listings gespeichert werden sollen
+        available_listings = [
+            (listing.get("id"), f"{listing.get('name', 'Unbekannt')} - {listing.get('asin_ean_sku', 'N/A')} ({listing.get('mp', 'N/A')})")
+            for listing in st.session_state["db_listings_for_edit"]
+        ]
+        
+        if available_listings:
+            selected_listing_ids = st.multiselect(
+                "Welche Listings sollen gespeichert werden?",
+                options=[lid for lid, _ in available_listings],
+                format_func=lambda lid: next(label for lid2, label in available_listings if lid2 == lid),
+                default=[lid for lid, _ in available_listings],  # Alle standardmäßig ausgewählt
+                key="select_listings_to_save"
+            )
+            
+            # Überschreiben-Option
+            overwrite_option = st.checkbox(
+                "Bestehende Einträge überschreiben",
+                value=True,  # Standardmäßig aktiviert
+                help="Wenn aktiviert, werden bestehende Listings (gleiche ASIN + MP) aktualisiert. Sonst werden sie übersprungen.",
+                key="overwrite_db_listings"
+            )
+            
+            if st.button("💾 Ausgewählte Listings speichern", key="btn_save_db_listings", type="primary", use_container_width=True):
+                if not selected_listing_ids:
+                    st.warning("⚠️ Bitte wähle mindestens ein Listing aus, das gespeichert werden soll.")
                 else:
-                    st.error("❌ ASIN/EAN/SKU oder MP fehlen")
+                    success_count = 0
+                    error_count = 0
+                    skipped_count = 0
+                    
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    for idx, listing_id in enumerate(selected_listing_ids):
+                        status_text.text(f"Speichere Listing {idx + 1} von {len(selected_listing_ids)}...")
+                        progress_bar.progress((idx + 1) / len(selected_listing_ids))
+                        
+                        if listing_id in st.session_state.get("db_listings_edited", {}):
+                            edited_info = st.session_state["db_listings_edited"][listing_id]
+                            edited_data = edited_info["data"]
+                            original_listing = edited_info["original"]
+                            
+                            listing_data = {
+                                "Product": edited_data.get("Product", ""),
+                                "Titel": edited_data.get("Titel", ""),
+                                "Bullet1": edited_data.get("Bullet1", ""),
+                                "Bullet2": edited_data.get("Bullet2", ""),
+                                "Bullet3": edited_data.get("Bullet3", ""),
+                                "Bullet4": edited_data.get("Bullet4", ""),
+                                "Bullet5": edited_data.get("Bullet5", ""),
+                                "Description": edited_data.get("Description", ""),
+                                "SearchTerms": edited_data.get("SearchTerms", ""),
+                                "Keywords": edited_data.get("Keywords", ""),
+                                "name": original_listing.get("name", "")
+                            }
+                            
+                            asin = original_listing.get("asin_ean_sku", "")
+                            mp = original_listing.get("mp", "")
+                            account = original_listing.get("account") if original_listing.get("account") else None
+                            project = original_listing.get("project") if original_listing.get("project") else None
+                            
+                            if asin and mp:
+                                # Prüfe ob existiert und ob überschrieben werden soll
+                                if overwrite_option:
+                                    # Überschreiben - nutze save_listing_to_db (macht automatisch Update wenn existiert)
+                                    if save_listing_to_db(db_engine, listing_data, asin, mp, account, project):
+                                        success_count += 1
+                                    else:
+                                        error_count += 1
+                                else:
+                                    # Nicht überschreiben - prüfe ob existiert
+                                    check_sql = text("SELECT id FROM listings WHERE asin_ean_sku = :asin AND mp = :mp")
+                                    with db_engine.connect() as conn:
+                                        existing = conn.execute(check_sql, {"asin": asin, "mp": mp}).fetchone()
+                                    
+                                    if existing:
+                                        skipped_count += 1
+                                    else:
+                                        # Nicht vorhanden, speichere neu
+                                        if save_listing_to_db(db_engine, listing_data, asin, mp, account, project):
+                                            success_count += 1
+                                        else:
+                                            error_count += 1
+                            else:
+                                error_count += 1
+                        else:
+                            error_count += 1
+                    
+                    progress_bar.empty()
+                    status_text.empty()
+                    
+                    # Ergebnisse anzeigen
+                    if success_count > 0:
+                        st.success(f"✅ {success_count} Listing(s) erfolgreich gespeichert!")
+                    if skipped_count > 0:
+                        st.info(f"⏭️ {skipped_count} Listing(s) übersprungen (bereits vorhanden und Überschreiben deaktiviert)")
+                    if error_count > 0:
+                        st.warning(f"⚠️ {error_count} Listing(s) konnten nicht gespeichert werden")
+                    
+                    if success_count > 0:
+                        st.balloons()
+                        # Entferne gespeicherte Listings aus der Bearbeitungsliste
+                        st.session_state["db_listings_for_edit"] = [
+                            l for l in st.session_state["db_listings_for_edit"]
+                            if l.get("id") not in selected_listing_ids
+                        ]
+                        # Entferne auch bearbeitete Daten
+                        for listing_id in selected_listing_ids:
+                            if listing_id in st.session_state.get("db_listings_edited", {}):
+                                del st.session_state["db_listings_edited"][listing_id]
+                        st.rerun()
+    else:
+        st.error("❌ Datenbankverbindung nicht verfügbar")
     
-    # Abbrechen-Button
-    if st.button("❌ Bearbeitung abbrechen", key="btn_cancel_db_edit"):
-        if "db_listing_for_edit" in st.session_state:
-            del st.session_state["db_listing_for_edit"]
-        if "db_listing_edited" in st.session_state:
-            del st.session_state["db_listing_edited"]
+    # Alle entfernen Button
+    if st.button("🗑️ Alle Listings aus Bearbeitung entfernen", key="btn_remove_all_db", type="secondary"):
+        st.session_state["db_listings_for_edit"] = []
+        st.session_state["db_listings_edited"] = {}
         st.rerun()
 
 # --- Download (Export) ---
