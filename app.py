@@ -2042,8 +2042,18 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
     for idx, db_listing in enumerate(st.session_state["db_listings_for_edit"]):
         listing_id = db_listing.get("id", str(idx))
         
+        # Generiere einen sinnvollen Namen für das Listing (Fallback-Kette)
+        listing_name = (
+            db_listing.get('name', '').strip() or 
+            db_listing.get('product', '').strip() or 
+            (db_listing.get('titel', '')[:50].strip() + '...' if len(db_listing.get('titel', '')) > 50 else db_listing.get('titel', '').strip()) or
+            f"ASIN: {db_listing.get('asin_ean_sku', 'N/A')}"
+        )
+        
         # Metadaten für Expander-Header
-        listing_label = f"{db_listing.get('name', 'Unbekannt')} - {db_listing.get('asin_ean_sku', 'N/A')} ({db_listing.get('mp', 'N/A')})"
+        asin = db_listing.get('asin_ean_sku', 'N/A')
+        mp = db_listing.get('mp', 'N/A')
+        listing_label = f"{listing_name} - {asin} ({mp})"
         
         with st.expander(f"📦 {listing_label}", expanded=True):
             # Metadaten anzeigen
@@ -2069,8 +2079,8 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                     st.rerun()
             
             # Konvertiere zu Format für render_listing (ohne Metadaten)
-            # Verwende 'name' als Product, falls Product leer ist
-            product_name = db_listing.get("Product", "") or db_listing.get("name", "") or f"Listing {db_listing.get('asin_ean_sku', 'Unbekannt')}"
+            # Verwende den generierten listing_name als Product
+            product_name = listing_name  # Verwende den bereits generierten Namen
             listing_for_render = {
                 "Product": product_name,
                 "Titel": db_listing.get("Titel", ""),
@@ -2112,10 +2122,19 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
     
     if db_engine:
         # Auswahl welche Listings gespeichert werden sollen
-        available_listings = [
-            (listing.get("id"), f"{listing.get('name', 'Unbekannt')} - {listing.get('asin_ean_sku', 'N/A')} ({listing.get('mp', 'N/A')})")
-            for listing in st.session_state["db_listings_for_edit"]
-        ]
+        # Generiere Namen für jedes Listing (gleiche Logik wie oben)
+        available_listings = []
+        for listing in st.session_state["db_listings_for_edit"]:
+            # Generiere Namen mit gleicher Fallback-Logik
+            listing_name = (
+                listing.get('name', '').strip() or 
+                listing.get('product', '').strip() or 
+                (listing.get('titel', '')[:50].strip() + '...' if len(listing.get('titel', '')) > 50 else listing.get('titel', '').strip()) or
+                f"ASIN: {listing.get('asin_ean_sku', 'N/A')}"
+            )
+            asin = listing.get('asin_ean_sku', 'N/A')
+            mp = listing.get('mp', 'N/A')
+            available_listings.append((listing.get("id"), f"{listing_name} - {asin} ({mp})"))
         
         if available_listings:
             selected_listing_ids = st.multiselect(
