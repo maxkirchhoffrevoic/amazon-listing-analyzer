@@ -1430,6 +1430,25 @@ if db_engine:
                             progress_bar = None
                             status_text = None
                         
+                        # Erkenne und nummeriere ASIN-Duplikate
+                        asin_counter = {}  # Zählt Vorkommen jeder ASIN
+                        asin_occurrence = {}  # Zählt aktuelle Nummer für jede ASIN
+                        
+                        # Erste Durchlauf: Zähle Vorkommen jeder ASIN
+                        for idx, row in upload_df.iterrows():
+                            asin = str(row.get("asin_ean_sku", "")).strip()
+                            if asin:
+                                asin_counter[asin] = asin_counter.get(asin, 0) + 1
+                        
+                        # Zweiter Durchlauf: Nummeriere Duplikate
+                        duplicate_count = 0
+                        for asin, count in asin_counter.items():
+                            if count > 1:
+                                duplicate_count += count
+                        
+                        if duplicate_count > 0:
+                            st.info(f"ℹ️ **{duplicate_count}** Zeilen mit duplizierten ASIN-Werten gefunden. Diese werden automatisch durchnummeriert (z.B. 'ASIN-1', 'ASIN-2').")
+                        
                         # Sammle alle Listings
                         for idx, row in upload_df.iterrows():
                             if show_details_supabase and progress_bar:
@@ -1456,9 +1475,17 @@ if db_engine:
                             project = str(row.get("project", "")).strip() if "project" in row and pd.notna(row.get("project")) else None
                             
                             if asin and mp:
+                                # Wenn diese ASIN mehrfach vorkommt, nummeriere sie
+                                if asin_counter.get(asin, 0) > 1:
+                                    asin_occurrence[asin] = asin_occurrence.get(asin, 0) + 1
+                                    # Füge Nummer hinzu: Original-ASIN + "-" + Nummer
+                                    numbered_asin = f"{asin}-{asin_occurrence[asin]}"
+                                else:
+                                    numbered_asin = asin
+                                
                                 listings_to_save.append({
                                     "data": listing_data,
-                                    "asin": asin,
+                                    "asin": numbered_asin,
                                     "mp": mp,
                                     "account": account,
                                     "project": project,
@@ -1607,6 +1634,25 @@ if db_engine:
                     success_count = 0
                     error_count = 0
                     
+                    # Erkenne und nummeriere ASIN-Duplikate
+                    asin_counter = {}  # Zählt Vorkommen jeder ASIN
+                    asin_occurrence = {}  # Zählt aktuelle Nummer für jede ASIN
+                    
+                    # Erste Durchlauf: Zähle Vorkommen jeder ASIN
+                    for idx, row in upload_df.iterrows():
+                        asin = str(row.get("asin_ean_sku", "")).strip()
+                        if asin:
+                            asin_counter[asin] = asin_counter.get(asin, 0) + 1
+                    
+                    # Zweiter Durchlauf: Nummeriere Duplikate
+                    duplicate_count = 0
+                    for asin, count in asin_counter.items():
+                        if count > 1:
+                            duplicate_count += count
+                    
+                    if duplicate_count > 0:
+                        st.info(f"ℹ️ **{duplicate_count}** Zeilen mit duplizierten ASIN-Werten gefunden. Diese werden automatisch durchnummeriert (z.B. 'ASIN-1', 'ASIN-2').")
+                    
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     
@@ -1635,7 +1681,15 @@ if db_engine:
                         project = str(row.get("project", "")).strip() if pd.notna(row.get("project")) else None
                         
                         if asin and mp:
-                            if save_listing_to_db(db_engine, listing_data, asin, mp, account, project):
+                            # Wenn diese ASIN mehrfach vorkommt, nummeriere sie
+                            if asin_counter.get(asin, 0) > 1:
+                                asin_occurrence[asin] = asin_occurrence.get(asin, 0) + 1
+                                # Füge Nummer hinzu: Original-ASIN + "-" + Nummer
+                                numbered_asin = f"{asin}-{asin_occurrence[asin]}"
+                            else:
+                                numbered_asin = asin
+                            
+                            if save_listing_to_db(db_engine, listing_data, numbered_asin, mp, account, project):
                                 success_count += 1
                             else:
                                 error_count += 1
@@ -1920,6 +1974,25 @@ if uploaded_file:
                         progress_bar = st.progress(0)
                         status_text = st.empty()
                     
+                    # Erkenne und nummeriere ASIN-Duplikate
+                    asin_counter = {}  # Zählt Vorkommen jeder ASIN
+                    asin_occurrence = {}  # Zählt aktuelle Nummer für jede ASIN
+                    
+                    # Erste Durchlauf: Zähle Vorkommen jeder ASIN
+                    for idx, row in df.iterrows():
+                        asin = str(row[asin_cols[0]]).strip() if pd.notna(row[asin_cols[0]]) else ""
+                        if asin:
+                            asin_counter[asin] = asin_counter.get(asin, 0) + 1
+                    
+                    # Zweiter Durchlauf: Nummeriere Duplikate
+                    duplicate_count = 0
+                    for asin, count in asin_counter.items():
+                        if count > 1:
+                            duplicate_count += count
+                    
+                    if duplicate_count > 0:
+                        st.info(f"ℹ️ **{duplicate_count}** Zeilen mit duplizierten ASIN-Werten gefunden. Diese werden automatisch durchnummeriert (z.B. 'ASIN-1', 'ASIN-2').")
+                    
                     # Bereite Daten für Batch-Upload vor
                     listings_to_save = []
                     
@@ -1951,9 +2024,17 @@ if uploaded_file:
                         project = str(row.get("Project", "")).strip() if "Project" in row and pd.notna(row.get("Project")) else None
                         
                         if asin and mp:
+                            # Wenn diese ASIN mehrfach vorkommt, nummeriere sie
+                            if asin_counter.get(asin, 0) > 1:
+                                asin_occurrence[asin] = asin_occurrence.get(asin, 0) + 1
+                                # Füge Nummer hinzu: Original-ASIN + "-" + Nummer
+                                numbered_asin = f"{asin}-{asin_occurrence[asin]}"
+                            else:
+                                numbered_asin = asin
+                            
                             listings_to_save.append({
                                 "data": listing_data,
-                                "asin": asin,
+                                "asin": numbered_asin,
                                 "mp": mp,
                                 "account": account,
                                 "project": project,
@@ -2315,6 +2396,25 @@ if updated_rows_all:
                     if not asin_cols or not mp_cols:
                         st.error("❌ Excel-Datei muss Spalten 'ASIN_EAN_SKU' (oder ähnlich) und 'MP' enthalten, wenn 'Metadaten aus Excel verwenden' aktiviert ist.")
                     else:
+                        # Erkenne und nummeriere ASIN-Duplikate
+                        asin_counter = {}  # Zählt Vorkommen jeder ASIN
+                        asin_occurrence = {}  # Zählt aktuelle Nummer für jede ASIN
+                        
+                        # Erste Durchlauf: Zähle Vorkommen jeder ASIN
+                        for idx, row in result_df.iterrows():
+                            asin = str(row[asin_cols[0]]).strip() if pd.notna(row[asin_cols[0]]) else ""
+                            if asin:
+                                asin_counter[asin] = asin_counter.get(asin, 0) + 1
+                        
+                        # Zweiter Durchlauf: Nummeriere Duplikate
+                        duplicate_count = 0
+                        for asin, count in asin_counter.items():
+                            if count > 1:
+                                duplicate_count += count
+                        
+                        if duplicate_count > 0:
+                            st.info(f"ℹ️ **{duplicate_count}** Zeilen mit duplizierten ASIN-Werten gefunden. Diese werden automatisch durchnummeriert (z.B. 'ASIN-1', 'ASIN-2').")
+                        
                         success_count = 0
                         error_count = 0
                         
@@ -2323,6 +2423,14 @@ if updated_rows_all:
                             mp = str(row[mp_cols[0]]).strip() if pd.notna(row[mp_cols[0]]) else None
                             
                             if asin and mp:
+                                # Wenn diese ASIN mehrfach vorkommt, nummeriere sie
+                                if asin_counter.get(asin, 0) > 1:
+                                    asin_occurrence[asin] = asin_occurrence.get(asin, 0) + 1
+                                    # Füge Nummer hinzu: Original-ASIN + "-" + Nummer
+                                    numbered_asin = f"{asin}-{asin_occurrence[asin]}"
+                                else:
+                                    numbered_asin = asin
+                                
                                 listing_data = {
                                     "Product": str(row.get("Product", "")),
                                     "Titel": str(row.get("Titel", "")),
@@ -2336,7 +2444,7 @@ if updated_rows_all:
                                     "Keywords": str(row.get("Keywords", ""))
                                 }
                                 
-                                if save_listing_to_db(db_engine, listing_data, asin, mp, save_account or None, save_project or None):
+                                if save_listing_to_db(db_engine, listing_data, numbered_asin, mp, save_account or None, save_project or None):
                                     success_count += 1
                                 else:
                                     error_count += 1
