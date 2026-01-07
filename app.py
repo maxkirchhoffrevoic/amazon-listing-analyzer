@@ -1690,11 +1690,16 @@ def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
     if product_value:
         default_name = product_value
     elif listing_id:
-        # Für DB-Listings: Verwende ASIN oder einen beschreibenden Namen basierend auf listing_id
-        # Extrahiere einen kurzen Teil der UUID für einen lesbaren Namen
-        short_id = listing_id.replace("-", "")[:8] if listing_id else str(i)
-        default_name = f"Listing {short_id}"
+        # Für DB-Listings: Versuche ASIN aus dem row zu extrahieren (falls vorhanden)
+        # Oder verwende einen kurzen Teil der UUID für einen lesbaren Namen
+        asin = str(row.get("asin_ean_sku", "")).strip() if row.get("asin_ean_sku") else None
+        if asin:
+            default_name = f"ASIN: {asin}"
+        else:
+            short_id = listing_id.replace("-", "")[:8] if listing_id else str(i)
+            default_name = f"Listing {short_id}"
     else:
+        # Für normale Uploads: Verwende Index + 1
         default_name = f"Listing {i+1}"
     
     if f"product_{key_suffix}" not in st.session_state:
@@ -2091,7 +2096,8 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                 "Bullet5": db_listing.get("Bullet5", ""),
                 "Description": db_listing.get("Description", ""),
                 "SearchTerms": db_listing.get("SearchTerms", ""),
-                "Keywords": db_listing.get("Keywords", "")
+                "Keywords": db_listing.get("Keywords", ""),
+                "asin_ean_sku": db_listing.get("asin_ean_sku", "")  # Für Fallback in render_listing
             }
             
             # Render Listing mit eindeutigem Index basierend auf ID
