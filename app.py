@@ -90,10 +90,24 @@ def init_database(engine):
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     
+    CREATE TABLE IF NOT EXISTS brand_guidelines (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        customer_name VARCHAR(255),
+        brand_name_format TEXT,
+        required_formulations TEXT,
+        forbidden_terms TEXT,
+        customer_feedback TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
     CREATE INDEX IF NOT EXISTS idx_asin ON listings(asin_ean_sku);
     CREATE INDEX IF NOT EXISTS idx_mp ON listings(mp);
     CREATE INDEX IF NOT EXISTS idx_account ON listings(account);
     CREATE INDEX IF NOT EXISTS idx_project ON listings(project);
+    CREATE INDEX IF NOT EXISTS idx_brand_guidelines_name ON brand_guidelines(name);
+    CREATE INDEX IF NOT EXISTS idx_brand_guidelines_customer ON brand_guidelines(customer_name);
     """
     
     try:
@@ -769,10 +783,10 @@ db_engine = get_db_connection()
 if db_engine:
     init_database(db_engine)
 
-# Header mit Logout-Button
-col_title, col_logout = st.columns([4, 1])
-with col_title:
-    st.title("🛠️ Amazon Listing Editor mit Keyword-Highlighting")
+# Header mit Logo und Logout-Button
+col_logo, col_logout = st.columns([4, 1])
+with col_logo:
+    st.image("public/logo.png", width=520)
 with col_logout:
     if st.button("🚪 Abmelden", key="btn_logout", help="Von der Anwendung abmelden"):
         st.session_state["authenticated"] = False
@@ -931,6 +945,137 @@ st.markdown("### ✍️ Kontext & Inputs für automatische Erstellung")
 st.info("💡 **Hinweis:** Mindestens eines der Felder 'Produktname', 'Produktspezifikationen' oder 'USPs' sollte ausgefüllt sein. Alle anderen Felder sind optional, helfen aber der KI dabei, bessere und genauere Listings zu erstellen.")
 
 # Strukturierte Input-Felder basierend auf Content-Richtlinien
+with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=False):
+    # Brand Guidelines aus Supabase laden
+    saved_guidelines = []
+    if db_engine:
+        try:
+            with db_engine.connect() as conn:
+                result = conn.execute(text("SELECT id, name, customer_name FROM brand_guidelines ORDER BY updated_at DESC"))
+                saved_guidelines = [{"id": row[0], "name": row[1], "customer_name": row[2]} for row in result.fetchall()]
+        except Exception:
+            saved_guidelines = []
+    
+    # Auswahl gespeicherter Brand Guidelines
+    if saved_guidelines:
+        guideline_options = ["-- Neue Guidelines eingeben --"] + [f"{g['name']}" + (f" ({g['customer_name']})" if g['customer_name'] else "") for g in saved_guidelines]
+        selected_guideline = st.selectbox(
+            "Gespeicherte Brand Guidelines auswählen (optional)",
+            options=guideline_options,
+            key="select_brand_guideline"
+        )
+        
+        # Prüfe ob sich die Auswahl geändert hat
+        if "last_selected_guideline" not in st.session_state:
+            st.session_state["last_selected_guideline"] = None
+        
+        if selected_guideline and selected_guideline != "-- Neue Guidelines eingeben --":
+            # Nur laden wenn sich die Auswahl geändert hat
+            if st.session_state["last_selected_guideline"] != selected_guideline:
+                selected_id = saved_guidelines[guideline_options.index(selected_guideline) - 1]["id"]
+                try:
+                    with db_engine.connect() as conn:
+                        result = conn.execute(text("SELECT * FROM brand_guidelines WHERE id = :id"), {"id": selected_id})
+                        guideline_data = result.fetchone()
+                        if guideline_data:
+                            # Fülle die Felder mit den geladenen Daten
+                            st.session_state["input_brand_format"] = guideline_data[3] or ""
+                            st.session_state["input_required_formulations"] = guideline_data[4] or ""
+                            st.session_state["input_forbidden_terms"] = guideline_data[5] or ""
+                            st.session_state["input_customer_feedback"] = guideline_data[6] or ""
+                            st.session_state["last_selected_guideline"] = selected_guideline
+                            st.success(f"✅ Brand Guidelines '{guideline_data[1]}' geladen!")
+                            st.rerun()
+                except Exception as e:
+                    st.error(f"Fehler beim Laden der Guidelines: {e}")
+        else:
+            # Reset wenn "Neue Guidelines eingeben" ausgewählt wurde
+            if st.session_state.get("last_selected_guideline"):
+                st.session_state["last_selected_guideline"] = None
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        brand_name_format = st.text_input(
+            "Brand/Product Name Schreibweise (optional)",
+            placeholder="z.B. BRANDNAME oder Brand-Name (genau wie es verwendet werden soll)",
+            key="input_brand_format"
+        )
+        required_formulations = st.text_area(
+            "Immer zu verwendende Slogans/Formulierungen/Wörter (optional)",
+            placeholder="z.B. 'Premium-Qualität', 'Made in Germany', bestimmte technische Begriffe die immer genannt werden müssen",
+            height=100,
+            key="input_required_formulations"
+        )
+    with col2:
+        forbidden_terms = st.text_area(
+            "❌ Verbotene Begriffe (optional)",
+            placeholder="z.B. Bluetooth, Hartje, Garantie, perfekt, ideal (kommagetrennt auflisten)",
+            height=130,
+            key="input_forbidden_terms"
+        )
+    
+    # Speichern-Button für Brand Guidelines
+    col_save1, col_save2 = st.columns([2, 1])
+    with col_save1:
+        guideline_name = st.text_input(
+            "Name für diese Brand Guidelines (zum Speichern)",
+            placeholder="z.B. Kunde XYZ - Premium Marke",
+            key="input_guideline_name"
+        )
+    with col_save2:
+        st.write("")  # Spacing
+        if st.button("💾 Brand Guidelines speichern", key="btn_save_guidelines"):
+            if guideline_name:
+                if db_engine:
+                    try:
+                        with db_engine.begin() as conn:
+                            # Prüfe ob Name bereits existiert
+                            check_sql = text("SELECT id FROM brand_guidelines WHERE name = :name")
+                            existing = conn.execute(check_sql, {"name": guideline_name}).fetchone()
+                            
+                            if existing:
+                                # Update
+                                update_sql = text("""
+                                    UPDATE brand_guidelines SET
+                                        brand_name_format = :brand_name_format,
+                                        required_formulations = :required_formulations,
+                                        forbidden_terms = :forbidden_terms,
+                                        customer_feedback = :customer_feedback,
+                                        updated_at = CURRENT_TIMESTAMP
+                                    WHERE id = :id
+                                """)
+                                conn.execute(update_sql, {
+                                    "id": existing[0],
+                                    "brand_name_format": st.session_state.get("input_brand_format", ""),
+                                    "required_formulations": st.session_state.get("input_required_formulations", ""),
+                                    "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
+                                    "customer_feedback": st.session_state.get("input_customer_feedback", "")
+                                })
+                                st.success(f"✅ Brand Guidelines '{guideline_name}' aktualisiert!")
+                                st.rerun()
+                            else:
+                                # Insert
+                                insert_sql = text("""
+                                    INSERT INTO brand_guidelines (name, brand_name_format, required_formulations, forbidden_terms, customer_feedback)
+                                    VALUES (:name, :brand_name_format, :required_formulations, :forbidden_terms, :customer_feedback)
+                                """)
+                                conn.execute(insert_sql, {
+                                    "name": guideline_name,
+                                    "brand_name_format": st.session_state.get("input_brand_format", ""),
+                                    "required_formulations": st.session_state.get("input_required_formulations", ""),
+                                    "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
+                                    "customer_feedback": st.session_state.get("input_customer_feedback", "")
+                                })
+                                st.success(f"✅ Brand Guidelines '{guideline_name}' gespeichert!")
+                                st.rerun()
+                    except Exception as e:
+                        st.error(f"Fehler beim Speichern: {e}")
+                else:
+                    st.error("Keine Datenbankverbindung verfügbar.")
+            else:
+                st.warning("Bitte gib einen Namen für die Brand Guidelines ein.")
+
+# Strukturierte Input-Felder basierend auf Content-Richtlinien
 with st.expander("📝 Produktinformationen", expanded=True):
     col1, col2 = st.columns(2)
     with col1:
@@ -976,28 +1121,6 @@ with st.expander("💬 Kundenbewertungen & Häufige Fragen (optional)", expanded
         height=100,
         key="input_customer_feedback"
     )
-
-with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=False):
-    col1, col2 = st.columns(2)
-    with col1:
-        brand_name_format = st.text_input(
-            "Brand/Product Name Schreibweise (optional)",
-            placeholder="z.B. BRANDNAME oder Brand-Name (genau wie es verwendet werden soll)",
-            key="input_brand_format"
-        )
-        required_formulations = st.text_area(
-            "Immer zu verwendende Slogans/Formulierungen/Wörter (optional)",
-            placeholder="z.B. 'Premium-Qualität', 'Made in Germany', bestimmte technische Begriffe die immer genannt werden müssen",
-            height=100,
-            key="input_required_formulations"
-        )
-    with col2:
-        forbidden_terms = st.text_area(
-            "❌ Verbotene Begriffe (optional)",
-            placeholder="z.B. Bluetooth, Hartje, Garantie, perfekt, ideal (kommagetrennt auflisten)",
-            height=130,
-            key="input_forbidden_terms"
-        )
 
 with st.expander("🔍 Keywords (optional)", expanded=False):
     keywords_input = st.text_area(
