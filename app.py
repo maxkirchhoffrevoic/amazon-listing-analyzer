@@ -1024,8 +1024,20 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                 
                 if debug_mode:
                     st.write(f"- Anzahl geladener Guidelines: {len(saved_guidelines)}")
+                    # Debug: Zeige auch die rohen Daten
+                    try:
+                        debug_result = conn.execute(text("SELECT * FROM brand_guidelines ORDER BY updated_at DESC"))
+                        all_rows = debug_result.fetchall()
+                        st.write(f"- Anzahl Zeilen in Tabelle: {len(all_rows)}")
+                        if all_rows:
+                            st.write("**Alle Zeilen in brand_guidelines Tabelle:**")
+                            for row in all_rows:
+                                st.write(f"  - ID: {row[0]}, Name: {row[1]}, Kunde: {row[2]}")
+                    except Exception as debug_e:
+                        st.write(f"- Fehler beim Debug-Abfragen: {debug_e}")
+                    
                     if saved_guidelines:
-                        st.write("**Geladene Guidelines:**")
+                        st.write("**Geladene Guidelines (für Dropdown):**")
                         for g in saved_guidelines:
                             st.write(f"  - ID: {g['id']}, Name: {g['name']}, Kunde: {g['customer_name']}")
                     else:
@@ -1043,11 +1055,15 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
     # Auswahl gespeicherter Brand Guidelines
     if saved_guidelines:
         guideline_options = ["-- Neue Guidelines eingeben --"] + [f"{g['name']}" + (f" ({g['customer_name']})" if g['customer_name'] else "") for g in saved_guidelines]
+        st.markdown("**📋 Gespeicherte Brand Guidelines:**")
         selected_guideline = st.selectbox(
-            "Gespeicherte Brand Guidelines auswählen (optional)",
+            "Wähle eine gespeicherte Brand Guidelines aus (optional)",
             options=guideline_options,
-            key="select_brand_guideline"
+            key="select_brand_guideline",
+            help="Wähle eine gespeicherte Brand Guidelines aus, um die Felder automatisch zu füllen"
         )
+    elif debug_mode:
+        st.info("ℹ️ Keine gespeicherten Guidelines gefunden. Speichere zuerst eine Brand Guidelines, um sie hier auswählen zu können.")
         
         # Prüfe ob sich die Auswahl geändert hat
         if "last_selected_guideline" not in st.session_state:
@@ -1151,6 +1167,14 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                     "customer_feedback": st.session_state.get("input_customer_feedback", "")
                                 })
                                 st.success(f"✅ Brand Guidelines '{guideline_name}' gespeichert!")
+                                if debug_mode:
+                                    # Prüfe ob wirklich gespeichert wurde
+                                    check_saved = conn.execute(text("SELECT id, name FROM brand_guidelines WHERE name = :name"), {"name": guideline_name})
+                                    saved_row = check_saved.fetchone()
+                                    if saved_row:
+                                        st.write(f"✅ **Bestätigung:** Guideline mit ID {saved_row[0]} wurde erfolgreich in der Datenbank gespeichert!")
+                                    else:
+                                        st.warning("⚠️ Warnung: Guideline wurde möglicherweise nicht gespeichert!")
                                 st.rerun()
                     except Exception as e:
                         st.error(f"Fehler beim Speichern: {e}")
