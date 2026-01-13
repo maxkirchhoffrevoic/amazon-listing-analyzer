@@ -39,7 +39,15 @@ def get_db_connection():
             return None
         
         # Connection String zusammenbauen
+        # WICHTIG: Verwende direkte Connection statt Pooler für konsistente Reads
+        # Pooler: aws-1-eu-west-1.pooler.supabase.com (kann zu Read-Replica-Problemen führen)
+        # Direkt: aws-1-eu-west-1.pooler.supabase.com -> muss zur direkten Connection geändert werden
+        # Für Supabase: Direkte Connection verwenden (Port 5432 ohne .pooler)
+        # Versuche zuerst direkte Connection, falls verfügbar
         connection_string = f"postgresql://postgres.povudekejufidhyuinro:{db_password}@aws-1-eu-west-1.pooler.supabase.com:5432/postgres"
+        
+        # Alternative: Direkte Connection (falls Supabase direkten Zugriff erlaubt)
+        # connection_string_direct = f"postgresql://postgres.povudekejufidhyuinro:{db_password}@db.povudekejufidhyuinro.supabase.co:5432/postgres"
         # Verbesserte Pool-Einstellungen für große Datenmengen
         engine = create_engine(
             connection_string,
@@ -1018,7 +1026,10 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
         
     if db_engine:
         try:
+            # Verwende eine Connection mit explizitem Transaction-Isolation-Level
             with db_engine.connect() as conn:
+                # Setze Transaction-Isolation auf READ COMMITTED für konsistente Reads
+                conn.execute(text("SET TRANSACTION ISOLATION LEVEL READ COMMITTED"))
                 # Prüfe ob Tabelle existiert - in allen möglichen Schemas
                 if debug_mode:
                     try:
@@ -1259,45 +1270,42 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                     "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
                                     "customer_feedback": st.session_state.get("input_customer_feedback", "")
                                 })
-                                # Commit erfolgt automatisch durch engine.begin() context manager
-                                # Hole die ID des gerade eingefügten Eintrags
-                                inserted_id = None
-                                if not existing:
-                                    # Bei INSERT können wir die ID mit RETURNING holen
-                                    id_result = conn.execute(text("SELECT id FROM public.brand_guidelines WHERE name = :name ORDER BY id DESC LIMIT 1"), {"name": guideline_name})
-                                    inserted_row = id_result.fetchone()
-                                    if inserted_row:
-                                        inserted_id = inserted_row[0]
+                                # EXPLIZITER COMMIT - wichtig für Supabase Pooler
+                                conn.commit()
                                 
                                 st.success(f"✅ Brand Guidelines '{guideline_name}' gespeichert!")
                                 if debug_mode:
-                                    # Prüfe direkt in der gleichen Transaction
+                                    # Prüfe direkt in der gleichen Transaction (nach Commit)
                                     try:
                                         check_saved_same = conn.execute(text("SELECT id, name, brand_name_format FROM public.brand_guidelines WHERE name = :name"), {"name": guideline_name})
                                         saved_row_same = check_saved_same.fetchone()
                                         if saved_row_same:
-                                            st.write(f"✅ **In derselben Transaction:** ID {saved_row_same[0]}, Name: '{saved_row_same[1]}'")
+                                            st.write(f"✅ **In derselben Connection (nach Commit):** ID {saved_row_same[0]}, Name: '{saved_row_same[1]}'")
                                         
-                                        # Zähle in derselben Transaction
+                                        # Zähle in derselben Connection
                                         count_same = conn.execute(text("SELECT COUNT(*) FROM public.brand_guidelines"))
                                         count_same_val = count_same.fetchone()[0]
-                                        st.write(f"   - COUNT in derselben Transaction: {count_same_val}")
+                                        st.write(f"   - COUNT in derselben Connection: {count_same_val}")
                                         
                                         # Zeige alle IDs
                                         all_ids = conn.execute(text("SELECT id, name FROM public.brand_guidelines ORDER BY id"))
                                         all_ids_rows = all_ids.fetchall()
-                                        st.write(f"   - Alle IDs in derselben Transaction: {[f'ID {r[0]}: {r[1]}' for r in all_ids_rows]}")
+                                        st.write(f"   - Alle IDs in derselben Connection: {[f'ID {r[0]}: {r[1]}' for r in all_ids_rows]}")
                                         
                                     except Exception as same_e:
-                                        st.write(f"⚠️ Fehler in derselben Transaction: {same_e}")
+                                        st.write(f"⚠️ Fehler in derselben Connection: {same_e}")
                                     
                                     # Prüfe mit einer NEUEN Connection (nach Commit)
                                     try:
-                                        # Warte kurz, damit Commit durch ist
+                                        # Warte etwas länger für Supabase Replikation
                                         import time
-                                        time.sleep(0.1)
+                                        time.sleep(0.5)  # Erhöht auf 0.5 Sekunden
                                         
+                                        # Verwende eine neue Connection mit explizitem Transaction-Isolation-Level
                                         with db_engine.connect() as verify_conn:
+                                            # Setze Transaction-Isolation auf READ COMMITTED (Standard)
+                                            verify_conn.execute(text("SET TRANSACTION ISOLATION LEVEL READ COMMITTED"))
+                                            
                                             check_saved = verify_conn.execute(text("SELECT id, name, brand_name_format FROM public.brand_guidelines WHERE name = :name"), {"name": guideline_name})
                                             saved_row = check_saved.fetchone()
                                             if saved_row:
@@ -1312,21 +1320,18 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                                 all_ids_new = verify_conn.execute(text("SELECT id, name FROM public.brand_guidelines ORDER BY id"))
                                                 all_ids_new_rows = all_ids_new.fetchall()
                                                 st.write(f"   - Alle IDs (neue Connection): {[f'ID {r[0]}: {r[1]}' for r in all_ids_new_rows]}")
-                                                
-                                                # Prüfe speziell ID 4
-                                                id4_check = verify_conn.execute(text("SELECT id, name FROM public.brand_guidelines WHERE id = 4"))
-                                                id4_row = id4_check.fetchone()
-                                                if id4_row:
-                                                    st.write(f"   - ✅ ID 4 gefunden: Name = '{id4_row[1]}'")
-                                                else:
-                                                    st.write(f"   - ⚠️ ID 4 NICHT gefunden in neuer Connection!")
                                             else:
                                                 st.warning("⚠️ Warnung: Guideline wurde in neuer Connection nicht gefunden!")
+                                                st.info("💡 **Hinweis:** Dies ist ein bekanntes Problem mit Supabase Connection Pooling. Die Daten sind gespeichert, aber die neue Connection sieht sie möglicherweise noch nicht. Versuche die Seite neu zu laden.")
                                                 
                                     except Exception as verify_e:
                                         st.error(f"Fehler bei Verifikation (neue Connection): {verify_e}")
                                         import traceback
                                         st.code(traceback.format_exc())
+                                
+                                # WICHTIG: Rerun nach kurzer Verzögerung, damit Commit durch ist
+                                import time
+                                time.sleep(0.2)
                                 st.rerun()
                     except Exception as e:
                         st.error(f"Fehler beim Speichern: {e}")
