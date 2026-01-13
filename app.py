@@ -1180,13 +1180,11 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                         result = conn.execute(text("SELECT * FROM public.brand_guidelines WHERE id = :id"), {"id": selected_id})
                         guideline_data = result.fetchone()
                         if guideline_data:
-                            # Fülle die Felder mit den geladenen Daten
-                            st.session_state["input_brand_format"] = guideline_data[3] or ""
-                            st.session_state["input_required_formulations"] = guideline_data[4] or ""
-                            st.session_state["input_forbidden_terms"] = guideline_data[5] or ""
-                            st.session_state["input_customer_feedback"] = guideline_data[6] or ""
+                            # Setze Session-State VOR dem Erstellen der Widgets
+                            # Verwende einen Flag, um beim nächsten Rerun die Werte zu setzen
+                            st.session_state["_load_guideline_id"] = selected_id
+                            st.session_state["_load_guideline_name"] = guideline_data[1]
                             st.session_state["last_selected_guideline"] = selected_guideline
-                            st.success(f"✅ Brand Guidelines '{guideline_data[1]}' geladen!")
                             st.rerun()
                 except Exception as e:
                     st.error(f"Fehler beim Laden der Guidelines: {e}")
@@ -1196,6 +1194,30 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                 st.session_state["last_selected_guideline"] = None
     elif debug_mode:
         st.info("ℹ️ Keine gespeicherten Guidelines gefunden. Speichere zuerst eine Brand Guidelines, um sie hier auswählen zu können.")
+    
+    # Lade Guidelines-Daten VOR dem Erstellen der Widgets
+    if "_load_guideline_id" in st.session_state and st.session_state["_load_guideline_id"]:
+        try:
+            with db_engine.connect() as conn:
+                result = conn.execute(text("SELECT * FROM public.brand_guidelines WHERE id = :id"), {"id": st.session_state["_load_guideline_id"]})
+                guideline_data = result.fetchone()
+                if guideline_data:
+                    # Setze die Werte VOR dem Erstellen der Widgets
+                    st.session_state["input_brand_format"] = guideline_data[3] or ""
+                    st.session_state["input_required_formulations"] = guideline_data[4] or ""
+                    st.session_state["input_forbidden_terms"] = guideline_data[5] or ""
+                    st.session_state["input_customer_feedback"] = guideline_data[6] or ""
+                    st.success(f"✅ Brand Guidelines '{st.session_state['_load_guideline_name']}' geladen!")
+                    # Lösche den Flag
+                    del st.session_state["_load_guideline_id"]
+                    del st.session_state["_load_guideline_name"]
+        except Exception as load_e:
+            st.error(f"Fehler beim Laden der Guidelines: {load_e}")
+            # Lösche den Flag auch bei Fehler
+            if "_load_guideline_id" in st.session_state:
+                del st.session_state["_load_guideline_id"]
+            if "_load_guideline_name" in st.session_state:
+                del st.session_state["_load_guideline_name"]
     
     col1, col2 = st.columns(2)
     with col1:
