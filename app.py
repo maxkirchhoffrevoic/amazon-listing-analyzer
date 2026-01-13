@@ -1019,29 +1019,35 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                     except Exception as e:
                         st.write(f"- Fehler beim Prüfen der Tabelle: {e}")
                 
+                # Verwende eine frische Connection für die Abfrage
                 result = conn.execute(text("SELECT id, name, customer_name FROM brand_guidelines ORDER BY updated_at DESC"))
-                saved_guidelines = [{"id": row[0], "name": row[1], "customer_name": row[2]} for row in result.fetchall()]
+                rows = result.fetchall()
+                saved_guidelines = [{"id": row[0], "name": row[1], "customer_name": row[2]} for row in rows]
                 
                 if debug_mode:
                     st.write(f"- Anzahl geladener Guidelines: {len(saved_guidelines)}")
-                    # Debug: Zeige auch die rohen Daten
+                    # Debug: Zeige auch die rohen Daten mit einer separaten Query
                     try:
-                        debug_result = conn.execute(text("SELECT * FROM brand_guidelines ORDER BY updated_at DESC"))
+                        debug_result = conn.execute(text("SELECT id, name, customer_name, brand_name_format, required_formulations, forbidden_terms, customer_feedback, created_at, updated_at FROM brand_guidelines ORDER BY updated_at DESC"))
                         all_rows = debug_result.fetchall()
-                        st.write(f"- Anzahl Zeilen in Tabelle: {len(all_rows)}")
+                        st.write(f"- Anzahl Zeilen in Tabelle (rohe Abfrage): {len(all_rows)}")
                         if all_rows:
                             st.write("**Alle Zeilen in brand_guidelines Tabelle:**")
                             for row in all_rows:
-                                st.write(f"  - ID: {row[0]}, Name: {row[1]}, Kunde: {row[2]}")
+                                st.write(f"  - ID: {row[0]}, Name: '{row[1]}', Kunde: {row[2]}, Brand Format: '{row[3] or ''}', Updated: {row[8]}")
+                        else:
+                            st.write("- ⚠️ Keine Zeilen in der Tabelle gefunden!")
                     except Exception as debug_e:
                         st.write(f"- Fehler beim Debug-Abfragen: {debug_e}")
+                        import traceback
+                        st.code(traceback.format_exc())
                     
                     if saved_guidelines:
                         st.write("**Geladene Guidelines (für Dropdown):**")
                         for g in saved_guidelines:
-                            st.write(f"  - ID: {g['id']}, Name: {g['name']}, Kunde: {g['customer_name']}")
+                            st.write(f"  - ID: {g['id']}, Name: '{g['name']}', Kunde: {g['customer_name']}")
                     else:
-                        st.write("- Keine Guidelines in der Datenbank gefunden")
+                        st.write("- ⚠️ Keine Guidelines in der Datenbank gefunden (saved_guidelines ist leer)")
         except Exception as e:
             if debug_mode:
                 st.error(f"**Fehler beim Laden der Guidelines:** {e}")
@@ -1167,15 +1173,28 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                     "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
                                     "customer_feedback": st.session_state.get("input_customer_feedback", "")
                                 })
+                                # Commit erfolgt automatisch durch engine.begin() context manager
+                                # Aber wir müssen eine neue Connection für die Verifikation verwenden
                                 st.success(f"✅ Brand Guidelines '{guideline_name}' gespeichert!")
                                 if debug_mode:
-                                    # Prüfe ob wirklich gespeichert wurde
-                                    check_saved = conn.execute(text("SELECT id, name FROM brand_guidelines WHERE name = :name"), {"name": guideline_name})
-                                    saved_row = check_saved.fetchone()
-                                    if saved_row:
-                                        st.write(f"✅ **Bestätigung:** Guideline mit ID {saved_row[0]} wurde erfolgreich in der Datenbank gespeichert!")
-                                    else:
-                                        st.warning("⚠️ Warnung: Guideline wurde möglicherweise nicht gespeichert!")
+                                    # Prüfe ob wirklich gespeichert wurde - mit einer neuen Connection
+                                    try:
+                                        with db_engine.connect() as verify_conn:
+                                            check_saved = verify_conn.execute(text("SELECT id, name, brand_name_format FROM brand_guidelines WHERE name = :name"), {"name": guideline_name})
+                                            saved_row = check_saved.fetchone()
+                                            if saved_row:
+                                                st.write(f"✅ **Bestätigung:** Guideline mit ID {saved_row[0]} wurde erfolgreich in der Datenbank gespeichert!")
+                                                st.write(f"   - Name: '{saved_row[1]}'")
+                                                st.write(f"   - Brand Format: '{saved_row[2] or ''}'")
+                                                
+                                                # Zähle alle Guidelines
+                                                count_result = verify_conn.execute(text("SELECT COUNT(*) FROM brand_guidelines"))
+                                                total_count = count_result.fetchone()[0]
+                                                st.write(f"   - Gesamtanzahl Guidelines in DB: {total_count}")
+                                            else:
+                                                st.warning("⚠️ Warnung: Guideline wurde möglicherweise nicht gespeichert!")
+                                    except Exception as verify_e:
+                                        st.error(f"Fehler bei Verifikation: {verify_e}")
                                 st.rerun()
                     except Exception as e:
                         st.error(f"Fehler beim Speichern: {e}")
