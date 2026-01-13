@@ -1260,27 +1260,73 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                     "customer_feedback": st.session_state.get("input_customer_feedback", "")
                                 })
                                 # Commit erfolgt automatisch durch engine.begin() context manager
-                                # Aber wir müssen eine neue Connection für die Verifikation verwenden
+                                # Hole die ID des gerade eingefügten Eintrags
+                                inserted_id = None
+                                if not existing:
+                                    # Bei INSERT können wir die ID mit RETURNING holen
+                                    id_result = conn.execute(text("SELECT id FROM public.brand_guidelines WHERE name = :name ORDER BY id DESC LIMIT 1"), {"name": guideline_name})
+                                    inserted_row = id_result.fetchone()
+                                    if inserted_row:
+                                        inserted_id = inserted_row[0]
+                                
                                 st.success(f"✅ Brand Guidelines '{guideline_name}' gespeichert!")
                                 if debug_mode:
-                                    # Prüfe ob wirklich gespeichert wurde - mit einer neuen Connection
+                                    # Prüfe direkt in der gleichen Transaction
                                     try:
+                                        check_saved_same = conn.execute(text("SELECT id, name, brand_name_format FROM public.brand_guidelines WHERE name = :name"), {"name": guideline_name})
+                                        saved_row_same = check_saved_same.fetchone()
+                                        if saved_row_same:
+                                            st.write(f"✅ **In derselben Transaction:** ID {saved_row_same[0]}, Name: '{saved_row_same[1]}'")
+                                        
+                                        # Zähle in derselben Transaction
+                                        count_same = conn.execute(text("SELECT COUNT(*) FROM public.brand_guidelines"))
+                                        count_same_val = count_same.fetchone()[0]
+                                        st.write(f"   - COUNT in derselben Transaction: {count_same_val}")
+                                        
+                                        # Zeige alle IDs
+                                        all_ids = conn.execute(text("SELECT id, name FROM public.brand_guidelines ORDER BY id"))
+                                        all_ids_rows = all_ids.fetchall()
+                                        st.write(f"   - Alle IDs in derselben Transaction: {[f'ID {r[0]}: {r[1]}' for r in all_ids_rows]}")
+                                        
+                                    except Exception as same_e:
+                                        st.write(f"⚠️ Fehler in derselben Transaction: {same_e}")
+                                    
+                                    # Prüfe mit einer NEUEN Connection (nach Commit)
+                                    try:
+                                        # Warte kurz, damit Commit durch ist
+                                        import time
+                                        time.sleep(0.1)
+                                        
                                         with db_engine.connect() as verify_conn:
                                             check_saved = verify_conn.execute(text("SELECT id, name, brand_name_format FROM public.brand_guidelines WHERE name = :name"), {"name": guideline_name})
                                             saved_row = check_saved.fetchone()
                                             if saved_row:
-                                                st.write(f"✅ **Bestätigung:** Guideline mit ID {saved_row[0]} wurde erfolgreich in der Datenbank gespeichert!")
-                                                st.write(f"   - Name: '{saved_row[1]}'")
-                                                st.write(f"   - Brand Format: '{saved_row[2] or ''}'")
+                                                st.write(f"✅ **Nach Commit (neue Connection):** ID {saved_row[0]}, Name: '{saved_row[1]}'")
                                                 
                                                 # Zähle alle Guidelines
                                                 count_result = verify_conn.execute(text("SELECT COUNT(*) FROM public.brand_guidelines"))
                                                 total_count = count_result.fetchone()[0]
-                                                st.write(f"   - Gesamtanzahl Guidelines in DB: {total_count}")
+                                                st.write(f"   - Gesamtanzahl Guidelines in DB (neue Connection): {total_count}")
+                                                
+                                                # Zeige alle IDs
+                                                all_ids_new = verify_conn.execute(text("SELECT id, name FROM public.brand_guidelines ORDER BY id"))
+                                                all_ids_new_rows = all_ids_new.fetchall()
+                                                st.write(f"   - Alle IDs (neue Connection): {[f'ID {r[0]}: {r[1]}' for r in all_ids_new_rows]}")
+                                                
+                                                # Prüfe speziell ID 4
+                                                id4_check = verify_conn.execute(text("SELECT id, name FROM public.brand_guidelines WHERE id = 4"))
+                                                id4_row = id4_check.fetchone()
+                                                if id4_row:
+                                                    st.write(f"   - ✅ ID 4 gefunden: Name = '{id4_row[1]}'")
+                                                else:
+                                                    st.write(f"   - ⚠️ ID 4 NICHT gefunden in neuer Connection!")
                                             else:
-                                                st.warning("⚠️ Warnung: Guideline wurde möglicherweise nicht gespeichert!")
+                                                st.warning("⚠️ Warnung: Guideline wurde in neuer Connection nicht gefunden!")
+                                                
                                     except Exception as verify_e:
-                                        st.error(f"Fehler bei Verifikation: {verify_e}")
+                                        st.error(f"Fehler bei Verifikation (neue Connection): {verify_e}")
+                                        import traceback
+                                        st.code(traceback.format_exc())
                                 st.rerun()
                     except Exception as e:
                         st.error(f"Fehler beim Speichern: {e}")
