@@ -400,6 +400,77 @@ def batch_save_listings_to_db(engine, listings_data, batch_size=100):
     
     return success_count, error_count, skipped_count, errors
 
+def create_example_excel_supabase():
+    """Erstellt eine Beispiel-Excel-Datei für Supabase Upload"""
+    data = {
+        "ASIN / EAN / SKU": ["B08XYZ1234", "B09ABC5678"],
+        "MP": ["DE", "FR"],
+        "Name": ["Beispiel Produkt 1", "Beispiel Produkt 2"],
+        "Titel": ["Beispiel Titel für Produkt 1", "Beispiel Titel für Produkt 2"],
+        "Account": ["Beispiel Account", "Beispiel Account"],
+        "Project": ["Beispiel Projekt", "Beispiel Projekt"],
+        "Image": ["https://example.com/image1.jpg", "https://example.com/image2.jpg"],
+        "Bullet1": ["Erster Bullet Point", "Erster Bullet Point"],
+        "Bullet2": ["Zweiter Bullet Point", "Zweiter Bullet Point"],
+        "Bullet3": ["Dritter Bullet Point", "Dritter Bullet Point"],
+        "Bullet4": ["Vierter Bullet Point", ""],
+        "Bullet5": ["Fünfter Bullet Point", ""],
+        "Description": ["Dies ist eine Beispiel-Beschreibung für das Produkt.", "Dies ist eine weitere Beispiel-Beschreibung."],
+        "SearchTerms": ["Beispiel, Suchbegriff, Keyword", "Beispiel, Keyword"],
+        "Keywords": ["keyword1, keyword2, keyword3", "keyword1, keyword2"]
+    }
+    df = pd.DataFrame(data)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
+    output.seek(0)
+    return output
+
+def create_example_excel_optimizations():
+    """Erstellt eine Beispiel-Excel-Datei für Optimierungen Upload"""
+    data = {
+        "ASIN / EAN / SKU": ["B08XYZ1234", "B09ABC5678"],
+        "MP": ["DE", "FR"],
+        "Name": ["Beispiel Produkt 1", "Beispiel Produkt 2"],
+        "Product": ["Beispiel Produkt Name 1", "Beispiel Produkt Name 2"],
+        "Titel": ["Beispiel Titel für Produkt 1", "Beispiel Titel für Produkt 2"],
+        "Bullet1": ["Erster Bullet Point", "Erster Bullet Point"],
+        "Bullet2": ["Zweiter Bullet Point", "Zweiter Bullet Point"],
+        "Bullet3": ["Dritter Bullet Point", "Dritter Bullet Point"],
+        "Bullet4": ["Vierter Bullet Point", ""],
+        "Bullet5": ["Fünfter Bullet Point", ""],
+        "Description": ["Dies ist eine Beispiel-Beschreibung für das Produkt.", "Dies ist eine weitere Beispiel-Beschreibung."],
+        "SearchTerms": ["Beispiel, Suchbegriff, Keyword", "Beispiel, Keyword"],
+        "Keywords": ["keyword1, keyword2, keyword3", "keyword1, keyword2"]
+    }
+    df = pd.DataFrame(data)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
+    output.seek(0)
+    return output
+
+def create_example_excel_listings():
+    """Erstellt eine Beispiel-Excel-Datei für normale Listings Upload"""
+    data = {
+        "Product": ["Beispiel Produkt 1", "Beispiel Produkt 2"],
+        "Titel": ["Beispiel Titel für Produkt 1", "Beispiel Titel für Produkt 2"],
+        "Bullet1": ["Erster Bullet Point", "Erster Bullet Point"],
+        "Bullet2": ["Zweiter Bullet Point", "Zweiter Bullet Point"],
+        "Bullet3": ["Dritter Bullet Point", "Dritter Bullet Point"],
+        "Bullet4": ["Vierter Bullet Point", ""],
+        "Bullet5": ["Fünfter Bullet Point", ""],
+        "Description": ["Dies ist eine Beispiel-Beschreibung für das Produkt.", "Dies ist eine weitere Beispiel-Beschreibung."],
+        "SearchTerms": ["Beispiel, Suchbegriff, Keyword", "Beispiel, Keyword"],
+        "Keywords": ["keyword1, keyword2, keyword3", "keyword1, keyword2"]
+    }
+    df = pd.DataFrame(data)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
+    output.seek(0)
+    return output
+
 st.set_page_config(
     page_title="Amazon Listing Editor",
     page_icon="📦",
@@ -1719,6 +1790,17 @@ if db_engine:
         Die Spaltennamen werden automatisch erkannt. Falls eine Spalte nicht erkannt wird, benenne sie entsprechend um.
         """)
         
+        # Beispiel-Datei Download
+        example_file_supabase = create_example_excel_supabase()
+        st.download_button(
+            label="📥 Beispiel-Excel herunterladen",
+            data=example_file_supabase,
+            file_name="beispiel_supabase_upload.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            help="Lade eine Beispiel-Excel-Datei herunter, um das richtige Format zu sehen"
+        )
+        st.markdown("---")
+        
         supabase_upload_file = st.file_uploader(
             "📤 Excel-Datei für Supabase-Upload",
             type=["xlsx"],
@@ -1951,6 +2033,17 @@ if db_engine:
         - `Product`, `Titel`, `Bullet1-5`, `Description`, `SearchTerms`, `Keywords`
         """)
         
+        # Beispiel-Datei Download
+        example_file_optimizations = create_example_excel_optimizations()
+        st.download_button(
+            label="📥 Beispiel-Excel herunterladen",
+            data=example_file_optimizations,
+            file_name="beispiel_optimierungen_upload.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            help="Lade eine Beispiel-Excel-Datei herunter, um das richtige Format zu sehen"
+        )
+        st.markdown("---")
+        
         upload_file_db = st.file_uploader(
             "📤 Excel-Datei für Datenbank-Upload",
             type=["xlsx"],
@@ -2104,6 +2197,20 @@ def byte_length(text):
     return len(text.encode("utf-8"))
 
 # --- Upload ---
+st.markdown("### 📤 Listings hochladen")
+st.markdown("Lade eine Excel-Datei mit deinen Listings hoch, um sie zu bearbeiten und zu optimieren.")
+
+# Beispiel-Datei Download
+example_file_listings = create_example_excel_listings()
+st.download_button(
+    label="📥 Beispiel-Excel herunterladen",
+    data=example_file_listings,
+    file_name="beispiel_listings_upload.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    help="Lade eine Beispiel-Excel-Datei herunter, um das richtige Format zu sehen"
+)
+st.markdown("---")
+
 uploaded_file = st.file_uploader("📤 Excel-Datei mit Listings hochladen", type=["xlsx"])
 
 # Session State für Upload-Modus
