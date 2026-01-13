@@ -1053,6 +1053,7 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
             st.warning("⚠️ Keine Datenbankverbindung verfügbar!")
     
     # Auswahl gespeicherter Brand Guidelines
+    selected_guideline = None
     if saved_guidelines:
         guideline_options = ["-- Neue Guidelines eingeben --"] + [f"{g['name']}" + (f" ({g['customer_name']})" if g['customer_name'] else "") for g in saved_guidelines]
         st.markdown("**📋 Gespeicherte Brand Guidelines:**")
@@ -1062,8 +1063,6 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
             key="select_brand_guideline",
             help="Wähle eine gespeicherte Brand Guidelines aus, um die Felder automatisch zu füllen"
         )
-    elif debug_mode:
-        st.info("ℹ️ Keine gespeicherten Guidelines gefunden. Speichere zuerst eine Brand Guidelines, um sie hier auswählen zu können.")
         
         # Prüfe ob sich die Auswahl geändert hat
         if "last_selected_guideline" not in st.session_state:
@@ -1092,6 +1091,8 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
             # Reset wenn "Neue Guidelines eingeben" ausgewählt wurde
             if st.session_state.get("last_selected_guideline"):
                 st.session_state["last_selected_guideline"] = None
+    elif debug_mode:
+        st.info("ℹ️ Keine gespeicherten Guidelines gefunden. Speichere zuerst eine Brand Guidelines, um sie hier auswählen zu können.")
     
     col1, col2 = st.columns(2)
     with col1:
