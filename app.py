@@ -783,10 +783,10 @@ db_engine = get_db_connection()
 if db_engine:
     init_database(db_engine)
 
-# Header mit Logo und Logout-Button
-col_logo, col_logout = st.columns([4, 1])
-with col_logo:
-    st.image("public/logo.png", width=520)
+# Header mit Logout-Button
+col_title, col_logout = st.columns([4, 1])
+with col_title:
+    st.title("🛠️ Amazon Listing Editor mit Keyword-Highlighting")
 with col_logout:
     if st.button("🚪 Abmelden", key="btn_logout", help="Von der Anwendung abmelden"):
         st.session_state["authenticated"] = False
@@ -945,16 +945,100 @@ st.markdown("### ✍️ Kontext & Inputs für automatische Erstellung")
 st.info("💡 **Hinweis:** Mindestens eines der Felder 'Produktname', 'Produktspezifikationen' oder 'USPs' sollte ausgefüllt sein. Alle anderen Felder sind optional, helfen aber der KI dabei, bessere und genauere Listings zu erstellen.")
 
 # Strukturierte Input-Felder basierend auf Content-Richtlinien
+with st.expander("📝 Produktinformationen", expanded=True):
+    col1, col2 = st.columns(2)
+    with col1:
+        product_name = st.text_input(
+            "Produktname * (empfohlen)",
+            placeholder="z.B. Brotbox Edelstahl",
+            key="input_product_name",
+            help="Mindestens eines der markierten Felder sollte ausgefüllt sein"
+        )
+        product_specs = st.text_area(
+            "Produktspezifikationen & Details * (empfohlen)",
+            placeholder="z.B. 1.2 L Volumen, BPA-frei, Farbe Silber, Maße 20x15x8 cm, Material: Edelstahl 18/10",
+            height=100,
+            key="input_product_specs",
+            help="Mindestens eines der markierten Felder sollte ausgefüllt sein"
+        )
+    with col2:
+        target_audience = st.text_area(
+            "Zielgruppe (optional)",
+            placeholder="z.B. Gesundheitsbewusste Verbraucher, Familien, Preis-Leistungs-Orientiert, Qualitätsbewusst",
+            height=80,
+            key="input_target_audience"
+        )
+        seasonal_info = st.text_input(
+            "Saisonalitäten (optional)",
+            placeholder="z.B. Besonders beliebt im Sommer, Geschenkidee zu Weihnachten",
+            key="input_seasonal"
+        )
+
+with st.expander("🎯 USPs & Verkaufsargumente", expanded=False):
+    usps = st.text_area(
+        "Unique Selling Points (USPs) * (empfohlen)",
+        placeholder="z.B. Auslaufsicher, spülmaschinenfest, umweltfreundlich, langlebig, geruchsneutral",
+        height=100,
+        key="input_usps",
+        help="Mindestens eines der markierten Felder sollte ausgefüllt sein"
+    )
+
+with st.expander("💬 Kundenbewertungen & Häufige Fragen (optional)", expanded=False):
+    customer_feedback = st.text_area(
+        "Häufige Fragen aus Bewertungen oder wichtige Punkte, die geklärt werden sollten",
+        placeholder="z.B. Kunden fragen oft nach Kompatibilität mit Geschirrspüler, Größe für Familien, Geruchsbildung",
+        height=100,
+        key="input_customer_feedback"
+    )
+
 with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=False):
     # Brand Guidelines aus Supabase laden
     saved_guidelines = []
+    
+    # Debug-Informationen
+    debug_mode = st.checkbox("🔍 Debug-Modus aktivieren", key="debug_brand_guidelines")
+    
+    if debug_mode:
+        st.write("**Debug-Informationen:**")
+        st.write(f"- Datenbankverbindung vorhanden: {db_engine is not None}")
+        
     if db_engine:
         try:
             with db_engine.connect() as conn:
+                # Prüfe ob Tabelle existiert
+                if debug_mode:
+                    try:
+                        check_table = conn.execute(text("""
+                            SELECT EXISTS (
+                                SELECT FROM information_schema.tables 
+                                WHERE table_name = 'brand_guidelines'
+                            )
+                        """))
+                        table_exists = check_table.fetchone()[0]
+                        st.write(f"- Tabelle 'brand_guidelines' existiert: {table_exists}")
+                    except Exception as e:
+                        st.write(f"- Fehler beim Prüfen der Tabelle: {e}")
+                
                 result = conn.execute(text("SELECT id, name, customer_name FROM brand_guidelines ORDER BY updated_at DESC"))
                 saved_guidelines = [{"id": row[0], "name": row[1], "customer_name": row[2]} for row in result.fetchall()]
-        except Exception:
+                
+                if debug_mode:
+                    st.write(f"- Anzahl geladener Guidelines: {len(saved_guidelines)}")
+                    if saved_guidelines:
+                        st.write("**Geladene Guidelines:**")
+                        for g in saved_guidelines:
+                            st.write(f"  - ID: {g['id']}, Name: {g['name']}, Kunde: {g['customer_name']}")
+                    else:
+                        st.write("- Keine Guidelines in der Datenbank gefunden")
+        except Exception as e:
+            if debug_mode:
+                st.error(f"**Fehler beim Laden der Guidelines:** {e}")
+                import traceback
+                st.code(traceback.format_exc())
             saved_guidelines = []
+    else:
+        if debug_mode:
+            st.warning("⚠️ Keine Datenbankverbindung verfügbar!")
     
     # Auswahl gespeicherter Brand Guidelines
     if saved_guidelines:
@@ -1070,57 +1154,13 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                 st.rerun()
                     except Exception as e:
                         st.error(f"Fehler beim Speichern: {e}")
+                        if debug_mode:
+                            import traceback
+                            st.code(traceback.format_exc())
                 else:
                     st.error("Keine Datenbankverbindung verfügbar.")
             else:
                 st.warning("Bitte gib einen Namen für die Brand Guidelines ein.")
-
-# Strukturierte Input-Felder basierend auf Content-Richtlinien
-with st.expander("📝 Produktinformationen", expanded=True):
-    col1, col2 = st.columns(2)
-    with col1:
-        product_name = st.text_input(
-            "Produktname * (empfohlen)",
-            placeholder="z.B. Brotbox Edelstahl",
-            key="input_product_name",
-            help="Mindestens eines der markierten Felder sollte ausgefüllt sein"
-        )
-        product_specs = st.text_area(
-            "Produktspezifikationen & Details * (empfohlen)",
-            placeholder="z.B. 1.2 L Volumen, BPA-frei, Farbe Silber, Maße 20x15x8 cm, Material: Edelstahl 18/10",
-            height=100,
-            key="input_product_specs",
-            help="Mindestens eines der markierten Felder sollte ausgefüllt sein"
-        )
-    with col2:
-        target_audience = st.text_area(
-            "Zielgruppe (optional)",
-            placeholder="z.B. Gesundheitsbewusste Verbraucher, Familien, Preis-Leistungs-Orientiert, Qualitätsbewusst",
-            height=80,
-            key="input_target_audience"
-        )
-        seasonal_info = st.text_input(
-            "Saisonalitäten (optional)",
-            placeholder="z.B. Besonders beliebt im Sommer, Geschenkidee zu Weihnachten",
-            key="input_seasonal"
-        )
-
-with st.expander("🎯 USPs & Verkaufsargumente", expanded=False):
-    usps = st.text_area(
-        "Unique Selling Points (USPs) * (empfohlen)",
-        placeholder="z.B. Auslaufsicher, spülmaschinenfest, umweltfreundlich, langlebig, geruchsneutral",
-        height=100,
-        key="input_usps",
-        help="Mindestens eines der markierten Felder sollte ausgefüllt sein"
-    )
-
-with st.expander("💬 Kundenbewertungen & Häufige Fragen (optional)", expanded=False):
-    customer_feedback = st.text_area(
-        "Häufige Fragen aus Bewertungen oder wichtige Punkte, die geklärt werden sollten",
-        placeholder="z.B. Kunden fragen oft nach Kompatibilität mit Geschirrspüler, Größe für Familien, Geruchsbildung",
-        height=100,
-        key="input_customer_feedback"
-    )
 
 with st.expander("🔍 Keywords (optional)", expanded=False):
     keywords_input = st.text_area(
