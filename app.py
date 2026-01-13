@@ -1701,6 +1701,22 @@ if db_engine:
         **Lade deine Excel-Datei hoch, um Listings direkt in die Supabase Datenbank zu importieren.**
         
         Diese Funktion ist speziell für den reinen Datenbank-Upload gedacht und getrennt vom normalen Bearbeitungs-Workflow.
+        
+        **Format der Excel-Datei:**
+        Die Excel-Datei sollte folgende Spalten enthalten:
+        - **ASIN/EAN/SKU** (oder ähnliche Namen wie "ASIN", "EAN", "SKU") - **Pflichtfeld**
+        - **MP** (oder "Marketplace") - **Pflichtfeld** - Der Marktplatz-Code (z.B. DE, FR, UK, IT, ES, etc.)
+        - **Name** (oder "Produktname") - Optional: Produktname
+        - **Title** oder **Titel** - Optional: Produkttitel
+        - **Account** - Optional: Account-Name
+        - **Project** (oder "Projekt") - Optional: Projekt-Name
+        - **Image** (oder "Bild") - Optional: Bild-URL
+        - **Bullet1** bis **Bullet5** - Optional: Bullet Points
+        - **Description** - Optional: Produktbeschreibung
+        - **SearchTerms** - Optional: Suchbegriffe
+        - **Keywords** - Optional: Keywords
+        
+        Die Spaltennamen werden automatisch erkannt. Falls eine Spalte nicht erkannt wird, benenne sie entsprechend um.
         """)
         
         supabase_upload_file = st.file_uploader(
@@ -2504,7 +2520,9 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
         
         # Metadaten für Expander-Header
         asin = db_listing.get('asin_ean_sku', 'N/A')
-        mp = db_listing.get('mp', 'N/A')
+        # Verwende geändertes MP aus session_state, falls vorhanden
+        mp_key = f"mp_{listing_id}"
+        mp = st.session_state.get(mp_key, db_listing.get('mp', 'N/A'))
         listing_label = f"{listing_name} - {asin} ({mp})"
         
         with st.expander(f"📦 {listing_label}", expanded=True):
@@ -2513,7 +2531,26 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
             with col1:
                 st.info(f"**ASIN/EAN/SKU:** {db_listing.get('asin_ean_sku', 'N/A')}")
             with col2:
-                st.info(f"**MP:** {db_listing.get('mp', 'N/A')}")
+                # Marktplatz-Auswahl
+                current_mp = db_listing.get('mp', '')
+                # Lade verfügbare Marktplätze aus der Datenbank
+                available_mps = get_distinct_values(db_engine, "mp") if db_engine else []
+                # Stelle sicher, dass der aktuelle MP in der Liste ist
+                if current_mp and current_mp not in available_mps:
+                    available_mps = [current_mp] + available_mps
+                # Speichere geändertes MP in session_state
+                mp_key = f"mp_{listing_id}"
+                if mp_key not in st.session_state:
+                    st.session_state[mp_key] = current_mp
+                selected_mp = st.selectbox(
+                    "**Marktplatz (MP)**",
+                    options=available_mps if available_mps else [current_mp] if current_mp else [],
+                    index=0 if not available_mps else (available_mps.index(current_mp) if current_mp in available_mps else 0),
+                    key=mp_key,
+                    help="Wähle den Marktplatz für dieses Listing (z.B. DE, FR, UK)"
+                )
+                # Aktualisiere session_state
+                st.session_state[mp_key] = selected_mp
             with col3:
                 st.info(f"**Account:** {db_listing.get('account', 'N/A')}")
             with col4:
@@ -2528,6 +2565,9 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                     # Entferne auch bearbeitete Daten
                     if listing_id in st.session_state.get("db_listings_edited", {}):
                         del st.session_state["db_listings_edited"][listing_id]
+                    # Entferne auch MP aus session_state
+                    if mp_key in st.session_state:
+                        del st.session_state[mp_key]
                     st.rerun()
             
             # Konvertiere zu Format für render_listing (ohne Metadaten)
@@ -2641,7 +2681,9 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                             }
                             
                             asin = original_listing.get("asin_ean_sku", "")
-                            mp = original_listing.get("mp", "")
+                            # Verwende geändertes MP aus session_state, falls vorhanden
+                            mp_key = f"mp_{listing_id}"
+                            mp = st.session_state.get(mp_key, original_listing.get("mp", ""))
                             account = original_listing.get("account") if original_listing.get("account") else None
                             project = original_listing.get("project") if original_listing.get("project") else None
                             
