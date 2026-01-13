@@ -90,7 +90,7 @@ def init_database(engine):
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     
-    CREATE TABLE IF NOT EXISTS brand_guidelines (
+    CREATE TABLE IF NOT EXISTS public.brand_guidelines (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         customer_name VARCHAR(255),
@@ -1001,42 +1001,128 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
     if debug_mode:
         st.write("**Debug-Informationen:**")
         st.write(f"- Datenbankverbindung vorhanden: {db_engine is not None}")
+        if db_engine:
+            try:
+                # Zeige Connection-Info
+                connection_url = str(db_engine.url).split('@')[1] if '@' in str(db_engine.url) else "N/A"
+                st.write(f"- Datenbank-URL (ohne Passwort): {connection_url}")
+                
+                # Prüfe aktuelles Schema
+                with db_engine.connect() as conn:
+                    schema_result = conn.execute(text("SELECT current_schema(), current_database()"))
+                    schema_info = schema_result.fetchone()
+                    st.write(f"- Aktuelles Schema: {schema_info[0]}")
+                    st.write(f"- Aktuelle Datenbank: {schema_info[1]}")
+            except Exception as schema_e:
+                st.write(f"- Fehler beim Abfragen des Schemas: {schema_e}")
         
     if db_engine:
         try:
             with db_engine.connect() as conn:
-                # Prüfe ob Tabelle existiert
+                # Prüfe ob Tabelle existiert - in allen möglichen Schemas
                 if debug_mode:
                     try:
-                        check_table = conn.execute(text("""
+                        # Prüfe in public Schema
+                        check_table_public = conn.execute(text("""
                             SELECT EXISTS (
                                 SELECT FROM information_schema.tables 
-                                WHERE table_name = 'brand_guidelines'
+                                WHERE table_schema = 'public' 
+                                AND table_name = 'brand_guidelines'
                             )
                         """))
-                        table_exists = check_table.fetchone()[0]
-                        st.write(f"- Tabelle 'brand_guidelines' existiert: {table_exists}")
+                        table_exists_public = check_table_public.fetchone()[0]
+                        st.write(f"- Tabelle 'brand_guidelines' existiert in 'public' Schema: {table_exists_public}")
+                        
+                        # Prüfe in allen Schemas
+                        check_all_schemas = conn.execute(text("""
+                            SELECT table_schema, table_name 
+                            FROM information_schema.tables 
+                            WHERE table_name = 'brand_guidelines'
+                        """))
+                        all_tables = check_all_schemas.fetchall()
+                        if all_tables:
+                            st.write(f"- Tabelle 'brand_guidelines' gefunden in folgenden Schemas:")
+                            for schema, table in all_tables:
+                                st.write(f"  - Schema: '{schema}', Tabelle: '{table}'")
+                        else:
+                            st.write("- ⚠️ Tabelle 'brand_guidelines' wurde in keinem Schema gefunden!")
+                            
+                        # Zeige alle Tabellen im public Schema
+                        all_public_tables = conn.execute(text("""
+                            SELECT table_name 
+                            FROM information_schema.tables 
+                            WHERE table_schema = 'public'
+                            ORDER BY table_name
+                        """))
+                        public_tables = [row[0] for row in all_public_tables.fetchall()]
+                        st.write(f"- Alle Tabellen im 'public' Schema: {', '.join(public_tables) if public_tables else 'Keine'}")
+                        
                     except Exception as e:
                         st.write(f"- Fehler beim Prüfen der Tabelle: {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
                 
                 # Verwende eine frische Connection für die Abfrage
-                result = conn.execute(text("SELECT id, name, customer_name FROM brand_guidelines ORDER BY updated_at DESC"))
+                # Explizit Schema angeben
+                if debug_mode:
+                    st.write("- Versuche Abfrage mit explizitem Schema 'public'...")
+                
+                result = conn.execute(text("SELECT id, name, customer_name FROM public.brand_guidelines ORDER BY updated_at DESC"))
                 rows = result.fetchall()
                 saved_guidelines = [{"id": row[0], "name": row[1], "customer_name": row[2]} for row in rows]
+                
+                if debug_mode:
+                    st.write(f"- Anzahl Zeilen aus Abfrage: {len(rows)}")
                 
                 if debug_mode:
                     st.write(f"- Anzahl geladener Guidelines: {len(saved_guidelines)}")
                     # Debug: Zeige auch die rohen Daten mit einer separaten Query
                     try:
-                        debug_result = conn.execute(text("SELECT id, name, customer_name, brand_name_format, required_formulations, forbidden_terms, customer_feedback, created_at, updated_at FROM brand_guidelines ORDER BY updated_at DESC"))
-                        all_rows = debug_result.fetchall()
-                        st.write(f"- Anzahl Zeilen in Tabelle (rohe Abfrage): {len(all_rows)}")
-                        if all_rows:
-                            st.write("**Alle Zeilen in brand_guidelines Tabelle:**")
-                            for row in all_rows:
-                                st.write(f"  - ID: {row[0]}, Name: '{row[1]}', Kunde: {row[2]}, Brand Format: '{row[3] or ''}', Updated: {row[8]}")
-                        else:
-                            st.write("- ⚠️ Keine Zeilen in der Tabelle gefunden!")
+                        # Versuche verschiedene Abfragen
+                        st.write("**Verschiedene Abfrage-Varianten:**")
+                        
+                        # Variante 1: Ohne Schema
+                        try:
+                            debug_result1 = conn.execute(text("SELECT id, name FROM brand_guidelines"))
+                            rows1 = debug_result1.fetchall()
+                            st.write(f"- Abfrage ohne Schema: {len(rows1)} Zeilen")
+                        except Exception as e1:
+                            st.write(f"- Abfrage ohne Schema fehlgeschlagen: {e1}")
+                        
+                        # Variante 2: Mit public Schema
+                        try:
+                            debug_result2 = conn.execute(text("SELECT id, name FROM public.brand_guidelines"))
+                            rows2 = debug_result2.fetchall()
+                            st.write(f"- Abfrage mit 'public' Schema: {len(rows2)} Zeilen")
+                            if rows2:
+                                st.write("  Zeilen:")
+                                for row in rows2:
+                                    st.write(f"    - ID: {row[0]}, Name: '{row[1]}'")
+                        except Exception as e2:
+                            st.write(f"- Abfrage mit 'public' Schema fehlgeschlagen: {e2}")
+                        
+                        # Variante 3: COUNT Query
+                        try:
+                            count_result = conn.execute(text("SELECT COUNT(*) FROM public.brand_guidelines"))
+                            count = count_result.fetchone()[0]
+                            st.write(f"- COUNT(*) Abfrage: {count} Zeilen")
+                        except Exception as e3:
+                            st.write(f"- COUNT(*) Abfrage fehlgeschlagen: {e3}")
+                            
+                        # Variante 4: Alle Spalten
+                        try:
+                            debug_result4 = conn.execute(text("SELECT id, name, customer_name, brand_name_format, required_formulations, forbidden_terms, customer_feedback, created_at, updated_at FROM public.brand_guidelines ORDER BY updated_at DESC"))
+                            all_rows = debug_result4.fetchall()
+                            st.write(f"- Vollständige Abfrage: {len(all_rows)} Zeilen")
+                            if all_rows:
+                                st.write("**Alle Zeilen in brand_guidelines Tabelle:**")
+                                for row in all_rows:
+                                    st.write(f"  - ID: {row[0]}, Name: '{row[1]}', Kunde: {row[2]}, Brand Format: '{row[3] or ''}', Updated: {row[8]}")
+                            else:
+                                st.write("- ⚠️ Keine Zeilen in der Tabelle gefunden!")
+                        except Exception as e4:
+                            st.write(f"- Vollständige Abfrage fehlgeschlagen: {e4}")
+                            
                     except Exception as debug_e:
                         st.write(f"- Fehler beim Debug-Abfragen: {debug_e}")
                         import traceback
@@ -1080,7 +1166,7 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                 selected_id = saved_guidelines[guideline_options.index(selected_guideline) - 1]["id"]
                 try:
                     with db_engine.connect() as conn:
-                        result = conn.execute(text("SELECT * FROM brand_guidelines WHERE id = :id"), {"id": selected_id})
+                        result = conn.execute(text("SELECT * FROM public.brand_guidelines WHERE id = :id"), {"id": selected_id})
                         guideline_data = result.fetchone()
                         if guideline_data:
                             # Fülle die Felder mit den geladenen Daten
@@ -1137,13 +1223,13 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                     try:
                         with db_engine.begin() as conn:
                             # Prüfe ob Name bereits existiert
-                            check_sql = text("SELECT id FROM brand_guidelines WHERE name = :name")
+                            check_sql = text("SELECT id FROM public.brand_guidelines WHERE name = :name")
                             existing = conn.execute(check_sql, {"name": guideline_name}).fetchone()
                             
                             if existing:
                                 # Update
                                 update_sql = text("""
-                                    UPDATE brand_guidelines SET
+                                    UPDATE public.brand_guidelines SET
                                         brand_name_format = :brand_name_format,
                                         required_formulations = :required_formulations,
                                         forbidden_terms = :forbidden_terms,
@@ -1163,7 +1249,7 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                             else:
                                 # Insert
                                 insert_sql = text("""
-                                    INSERT INTO brand_guidelines (name, brand_name_format, required_formulations, forbidden_terms, customer_feedback)
+                                    INSERT INTO public.brand_guidelines (name, brand_name_format, required_formulations, forbidden_terms, customer_feedback)
                                     VALUES (:name, :brand_name_format, :required_formulations, :forbidden_terms, :customer_feedback)
                                 """)
                                 conn.execute(insert_sql, {
@@ -1180,7 +1266,7 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                     # Prüfe ob wirklich gespeichert wurde - mit einer neuen Connection
                                     try:
                                         with db_engine.connect() as verify_conn:
-                                            check_saved = verify_conn.execute(text("SELECT id, name, brand_name_format FROM brand_guidelines WHERE name = :name"), {"name": guideline_name})
+                                            check_saved = verify_conn.execute(text("SELECT id, name, brand_name_format FROM public.brand_guidelines WHERE name = :name"), {"name": guideline_name})
                                             saved_row = check_saved.fetchone()
                                             if saved_row:
                                                 st.write(f"✅ **Bestätigung:** Guideline mit ID {saved_row[0]} wurde erfolgreich in der Datenbank gespeichert!")
@@ -1188,7 +1274,7 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                                 st.write(f"   - Brand Format: '{saved_row[2] or ''}'")
                                                 
                                                 # Zähle alle Guidelines
-                                                count_result = verify_conn.execute(text("SELECT COUNT(*) FROM brand_guidelines"))
+                                                count_result = verify_conn.execute(text("SELECT COUNT(*) FROM public.brand_guidelines"))
                                                 total_count = count_result.fetchone()[0]
                                                 st.write(f"   - Gesamtanzahl Guidelines in DB: {total_count}")
                                             else:
