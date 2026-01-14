@@ -1402,17 +1402,17 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                             check_saved_same = conn.execute(text("SELECT id, name, brand_name_format FROM public.brand_guidelines WHERE name = :name"), {"name": guideline_name})
                                             saved_row_same = check_saved_same.fetchone()
                                             if saved_row_same:
-                                            st.write(f"✅ **In derselben Connection (nach Commit):** ID {saved_row_same[0]}, Name: '{saved_row_same[1]}'")
-                                            
-                                            # Zähle in derselben Connection
-                                            count_same = conn.execute(text("SELECT COUNT(*) FROM public.brand_guidelines"))
-                                            count_same_val = count_same.fetchone()[0]
-                                            st.write(f"   - COUNT in derselben Connection: {count_same_val}")
-                                            
-                                            # Zeige alle IDs
-                                            all_ids = conn.execute(text("SELECT id, name FROM public.brand_guidelines ORDER BY id"))
-                                            all_ids_rows = all_ids.fetchall()
-                                            st.write(f"   - Alle IDs in derselben Connection: {[f'ID {r[0]}: {r[1]}' for r in all_ids_rows]}")
+                                                st.write(f"✅ **In derselben Connection (nach Commit):** ID {saved_row_same[0]}, Name: '{saved_row_same[1]}'")
+                                                
+                                                # Zähle in derselben Connection
+                                                count_same = conn.execute(text("SELECT COUNT(*) FROM public.brand_guidelines"))
+                                                count_same_val = count_same.fetchone()[0]
+                                                st.write(f"   - COUNT in derselben Connection: {count_same_val}")
+                                                
+                                                # Zeige alle IDs
+                                                all_ids = conn.execute(text("SELECT id, name FROM public.brand_guidelines ORDER BY id"))
+                                                all_ids_rows = all_ids.fetchall()
+                                                st.write(f"   - Alle IDs in derselben Connection: {[f'ID {r[0]}: {r[1]}' for r in all_ids_rows]}")
                                             
                                         except Exception as same_e:
                                             st.write(f"⚠️ Fehler in derselben Connection: {same_e}")
