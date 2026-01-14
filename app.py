@@ -1400,8 +1400,8 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                         # Prüfe direkt in der gleichen Transaction (nach Commit)
                                         try:
                                             check_saved_same = conn.execute(text("SELECT id, name, brand_name_format FROM public.brand_guidelines WHERE name = :name"), {"name": guideline_name})
-                                        saved_row_same = check_saved_same.fetchone()
-                                        if saved_row_same:
+                                            saved_row_same = check_saved_same.fetchone()
+                                            if saved_row_same:
                                             st.write(f"✅ **In derselben Connection (nach Commit):** ID {saved_row_same[0]}, Name: '{saved_row_same[1]}'")
                                             
                                             # Zähle in derselben Connection
