@@ -1043,7 +1043,8 @@ with st.expander("💬 Kundenbewertungen & Häufige Fragen (optional)", expanded
         "Häufige Fragen aus Bewertungen oder wichtige Punkte, die geklärt werden sollten",
         placeholder="z.B. Kunden fragen oft nach Kompatibilität mit Geschirrspüler, Größe für Familien, Geruchsbildung",
         height=100,
-        key="input_customer_feedback"
+        key="input_customer_feedback",
+        value=st.session_state.get("input_customer_feedback", "")
     )
 
 with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=False):
@@ -1227,10 +1228,28 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                         result = conn.execute(text("SELECT * FROM public.brand_guidelines WHERE id = :id"), {"id": selected_id})
                         guideline_data = result.fetchone()
                         if guideline_data:
-                            # Setze Session-State VOR dem Erstellen der Widgets
-                            # Verwende einen Flag, um beim nächsten Rerun die Werte zu setzen
-                            st.session_state["_load_guideline_id"] = selected_id
-                            st.session_state["_load_guideline_name"] = guideline_data[1]
+                            # Setze die Werte DIREKT, bevor die Widgets erstellt werden
+                            # Lösche zuerst die alten Werte, falls vorhanden
+                            if "input_brand_format" in st.session_state:
+                                del st.session_state["input_brand_format"]
+                            if "input_required_formulations" in st.session_state:
+                                del st.session_state["input_required_formulations"]
+                            if "input_forbidden_terms" in st.session_state:
+                                del st.session_state["input_forbidden_terms"]
+                            if "input_customer_feedback" in st.session_state:
+                                del st.session_state["input_customer_feedback"]
+                            if "input_guideline_name" in st.session_state:
+                                del st.session_state["input_guideline_name"]
+                            
+                            # Setze die neuen Werte
+                            st.session_state["input_brand_format"] = guideline_data[3] or ""
+                            st.session_state["input_required_formulations"] = guideline_data[4] or ""
+                            st.session_state["input_forbidden_terms"] = guideline_data[5] or ""
+                            st.session_state["input_customer_feedback"] = guideline_data[6] or ""
+                            st.session_state["input_guideline_name"] = guideline_data[1]  # Name
+                            # Speichere auch die ID für späteres Update
+                            st.session_state["_editing_guideline_id"] = selected_id
+                            st.session_state["_editing_guideline_name"] = guideline_data[1]
                             st.session_state["last_selected_guideline"] = selected_guideline
                             st.rerun()
                 except Exception as e:
@@ -1239,63 +1258,51 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
             # Reset wenn "Neue Guidelines eingeben" ausgewählt wurde
             if st.session_state.get("last_selected_guideline"):
                 st.session_state["last_selected_guideline"] = None
-            # Lösche auch Editing-Flags wenn neue Guidelines eingegeben werden sollen
+            # Lösche auch Editing-Flags und alle Eingabewerte wenn neue Guidelines eingegeben werden sollen
             if "_editing_guideline_id" in st.session_state:
                 del st.session_state["_editing_guideline_id"]
             if "_editing_guideline_name" in st.session_state:
                 del st.session_state["_editing_guideline_name"]
             if "input_guideline_name" in st.session_state:
                 del st.session_state["input_guideline_name"]
+            if "input_brand_format" in st.session_state:
+                del st.session_state["input_brand_format"]
+            if "input_required_formulations" in st.session_state:
+                del st.session_state["input_required_formulations"]
+            if "input_forbidden_terms" in st.session_state:
+                del st.session_state["input_forbidden_terms"]
+            if "input_customer_feedback" in st.session_state:
+                del st.session_state["input_customer_feedback"]
     elif debug_mode:
         st.info("ℹ️ Keine gespeicherten Guidelines gefunden. Speichere zuerst eine Brand Guidelines, um sie hier auswählen zu können.")
     
-    # Lade Guidelines-Daten VOR dem Erstellen der Widgets
-    if "_load_guideline_id" in st.session_state and st.session_state["_load_guideline_id"]:
-        try:
-            with db_engine.connect() as conn:
-                result = conn.execute(text("SELECT * FROM public.brand_guidelines WHERE id = :id"), {"id": st.session_state["_load_guideline_id"]})
-                guideline_data = result.fetchone()
-                if guideline_data:
-                    # Setze die Werte VOR dem Erstellen der Widgets
-                    st.session_state["input_brand_format"] = guideline_data[3] or ""
-                    st.session_state["input_required_formulations"] = guideline_data[4] or ""
-                    st.session_state["input_forbidden_terms"] = guideline_data[5] or ""
-                    st.session_state["input_customer_feedback"] = guideline_data[6] or ""
-                    # Speichere auch den Namen und die ID für späteres Update
-                    st.session_state["_editing_guideline_id"] = st.session_state["_load_guideline_id"]
-                    st.session_state["_editing_guideline_name"] = guideline_data[1]  # Name aus DB
-                    st.session_state["input_guideline_name"] = guideline_data[1]  # Setze Namen im Eingabefeld
-                    st.success(f"✅ Brand Guidelines '{st.session_state['_load_guideline_name']}' geladen! Du kannst sie jetzt bearbeiten und speichern.")
-                    # Lösche den Flag
-                    del st.session_state["_load_guideline_id"]
-                    del st.session_state["_load_guideline_name"]
-        except Exception as load_e:
-            st.error(f"Fehler beim Laden der Guidelines: {load_e}")
-            # Lösche den Flag auch bei Fehler
-            if "_load_guideline_id" in st.session_state:
-                del st.session_state["_load_guideline_id"]
-            if "_load_guideline_name" in st.session_state:
-                del st.session_state["_load_guideline_name"]
+    # Zeige Info wenn eine Guideline geladen wurde
+    if "_editing_guideline_id" in st.session_state and st.session_state.get("last_selected_guideline"):
+        guideline_name_display = st.session_state.get("_editing_guideline_name", "unbekannt")
+        st.success(f"✅ Brand Guidelines '{guideline_name_display}' geladen! Du kannst sie jetzt bearbeiten und speichern.")
     
     col1, col2 = st.columns(2)
     with col1:
         brand_name_format = st.text_input(
             "Brand/Product Name Schreibweise (optional)",
             placeholder="z.B. BRANDNAME oder Brand-Name (genau wie es verwendet werden soll)",
-            key="input_brand_format"
+            key="input_brand_format",
+            value=st.session_state.get("input_brand_format", "")
         )
         required_formulations = st.text_area(
             "Immer zu verwendende Slogans/Formulierungen/Wörter (optional)",
             placeholder="z.B. 'Premium-Qualität', 'Made in Germany', bestimmte technische Begriffe die immer genannt werden müssen",
             height=100,
-            key="input_required_formulations"
+            key="input_required_formulations",
+            value=st.session_state.get("input_required_formulations", "")
         )
     with col2:
         forbidden_terms = st.text_area(
             "❌ Verbotene Begriffe (optional)",
             placeholder="z.B. Bluetooth, Hartje, Garantie, perfekt, ideal (kommagetrennt auflisten)",
             height=130,
-            key="input_forbidden_terms"
+            key="input_forbidden_terms",
+            value=st.session_state.get("input_forbidden_terms", "")
         )
     
     # Speichern-Button für Brand Guidelines
