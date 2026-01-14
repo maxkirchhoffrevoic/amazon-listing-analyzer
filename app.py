@@ -2321,7 +2321,7 @@ def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
                 help="Wähle den Marktplatz für dieses Listing",
                 on_change=_keep_open_expander
             )
-            st.session_state[mp_key] = selected_mp
+            # Der Wert wird automatisch in st.session_state[mp_key] gespeichert, kein manuelles Setzen nötig
             
             # Account (optional)
             account_key = f"account_{key_suffix}"
