@@ -1239,6 +1239,13 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
             # Reset wenn "Neue Guidelines eingeben" ausgewählt wurde
             if st.session_state.get("last_selected_guideline"):
                 st.session_state["last_selected_guideline"] = None
+            # Lösche auch Editing-Flags wenn neue Guidelines eingegeben werden sollen
+            if "_editing_guideline_id" in st.session_state:
+                del st.session_state["_editing_guideline_id"]
+            if "_editing_guideline_name" in st.session_state:
+                del st.session_state["_editing_guideline_name"]
+            if "input_guideline_name" in st.session_state:
+                del st.session_state["input_guideline_name"]
     elif debug_mode:
         st.info("ℹ️ Keine gespeicherten Guidelines gefunden. Speichere zuerst eine Brand Guidelines, um sie hier auswählen zu können.")
     
@@ -1254,7 +1261,11 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                     st.session_state["input_required_formulations"] = guideline_data[4] or ""
                     st.session_state["input_forbidden_terms"] = guideline_data[5] or ""
                     st.session_state["input_customer_feedback"] = guideline_data[6] or ""
-                    st.success(f"✅ Brand Guidelines '{st.session_state['_load_guideline_name']}' geladen!")
+                    # Speichere auch den Namen und die ID für späteres Update
+                    st.session_state["_editing_guideline_id"] = st.session_state["_load_guideline_id"]
+                    st.session_state["_editing_guideline_name"] = guideline_data[1]  # Name aus DB
+                    st.session_state["input_guideline_name"] = guideline_data[1]  # Setze Namen im Eingabefeld
+                    st.success(f"✅ Brand Guidelines '{st.session_state['_load_guideline_name']}' geladen! Du kannst sie jetzt bearbeiten und speichern.")
                     # Lösche den Flag
                     del st.session_state["_load_guideline_id"]
                     del st.session_state["_load_guideline_name"]
@@ -1293,8 +1304,12 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
         guideline_name = st.text_input(
             "Name für diese Brand Guidelines (zum Speichern)",
             placeholder="z.B. Kunde XYZ - Premium Marke",
-            key="input_guideline_name"
+            key="input_guideline_name",
+            value=st.session_state.get("input_guideline_name", "")
         )
+        # Zeige Info wenn eine Guideline bearbeitet wird
+        if "_editing_guideline_id" in st.session_state:
+            st.info(f"✏️ Bearbeite bestehende Guideline (ID: {st.session_state['_editing_guideline_id']}). Beim Speichern wird diese überschrieben.")
     with col_save2:
         st.write("")  # Spacing
         if st.button("💾 Brand Guidelines speichern", key="btn_save_guidelines"):
@@ -1302,30 +1317,68 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                 if db_engine:
                     try:
                         with db_engine.begin() as conn:
-                            # Prüfe ob Name bereits existiert
-                            check_sql = text("SELECT id FROM public.brand_guidelines WHERE name = :name")
-                            existing = conn.execute(check_sql, {"name": guideline_name}).fetchone()
+                            # Prüfe ob wir eine bestehende Guideline bearbeiten (basierend auf ID)
+                            editing_id = st.session_state.get("_editing_guideline_id")
                             
-                            if existing:
-                                # Update
-                                update_sql = text("""
-                                    UPDATE public.brand_guidelines SET
-                                        brand_name_format = :brand_name_format,
-                                        required_formulations = :required_formulations,
-                                        forbidden_terms = :forbidden_terms,
-                                        customer_feedback = :customer_feedback,
-                                        updated_at = CURRENT_TIMESTAMP
-                                    WHERE id = :id
-                                """)
-                                conn.execute(update_sql, {
-                                    "id": existing[0],
-                                    "brand_name_format": st.session_state.get("input_brand_format", ""),
-                                    "required_formulations": st.session_state.get("input_required_formulations", ""),
-                                    "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
-                                    "customer_feedback": st.session_state.get("input_customer_feedback", "")
-                                })
-                                st.success(f"✅ Brand Guidelines '{guideline_name}' aktualisiert!")
-                                st.rerun()
+                            if editing_id:
+                                # Update der bestehenden Guideline (basierend auf ID, nicht Name)
+                                # Prüfe ob der Name geändert wurde und ob der neue Name bereits existiert
+                                check_name_sql = text("SELECT id FROM public.brand_guidelines WHERE name = :name AND id != :id")
+                                name_exists = conn.execute(check_name_sql, {"name": guideline_name, "id": editing_id}).fetchone()
+                                
+                                if name_exists:
+                                    st.error(f"❌ Der Name '{guideline_name}' wird bereits von einer anderen Guideline verwendet. Bitte wähle einen anderen Namen.")
+                                else:
+                                    # Update mit neuem Namen und Inhalten
+                                    update_sql = text("""
+                                        UPDATE public.brand_guidelines SET
+                                            name = :name,
+                                            brand_name_format = :brand_name_format,
+                                            required_formulations = :required_formulations,
+                                            forbidden_terms = :forbidden_terms,
+                                            customer_feedback = :customer_feedback,
+                                            updated_at = CURRENT_TIMESTAMP
+                                        WHERE id = :id
+                                    """)
+                                    conn.execute(update_sql, {
+                                        "id": editing_id,
+                                        "name": guideline_name,
+                                        "brand_name_format": st.session_state.get("input_brand_format", ""),
+                                        "required_formulations": st.session_state.get("input_required_formulations", ""),
+                                        "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
+                                        "customer_feedback": st.session_state.get("input_customer_feedback", "")
+                                    })
+                                    st.success(f"✅ Brand Guidelines '{guideline_name}' aktualisiert!")
+                                    # Lösche die Editing-Flags
+                                    del st.session_state["_editing_guideline_id"]
+                                    if "_editing_guideline_name" in st.session_state:
+                                        del st.session_state["_editing_guideline_name"]
+                                    st.rerun()
+                            else:
+                                # Prüfe ob Name bereits existiert (für neue Guidelines)
+                                check_sql = text("SELECT id FROM public.brand_guidelines WHERE name = :name")
+                                existing = conn.execute(check_sql, {"name": guideline_name}).fetchone()
+                                
+                                if existing:
+                                    # Update basierend auf Name (Fallback für alte Funktionalität)
+                                    update_sql = text("""
+                                        UPDATE public.brand_guidelines SET
+                                            brand_name_format = :brand_name_format,
+                                            required_formulations = :required_formulations,
+                                            forbidden_terms = :forbidden_terms,
+                                            customer_feedback = :customer_feedback,
+                                            updated_at = CURRENT_TIMESTAMP
+                                        WHERE id = :id
+                                    """)
+                                    conn.execute(update_sql, {
+                                        "id": existing[0],
+                                        "brand_name_format": st.session_state.get("input_brand_format", ""),
+                                        "required_formulations": st.session_state.get("input_required_formulations", ""),
+                                        "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
+                                        "customer_feedback": st.session_state.get("input_customer_feedback", "")
+                                    })
+                                    st.success(f"✅ Brand Guidelines '{guideline_name}' aktualisiert!")
+                                    st.rerun()
                             else:
                                 # Insert
                                 insert_sql = text("""
