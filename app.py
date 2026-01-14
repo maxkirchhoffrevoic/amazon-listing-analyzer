@@ -426,30 +426,6 @@ def create_example_excel_supabase():
     output.seek(0)
     return output
 
-def create_example_excel_optimizations():
-    """Erstellt eine Beispiel-Excel-Datei für Optimierungen Upload"""
-    data = {
-        "ASIN / EAN / SKU": ["B08XYZ1234", "B09ABC5678"],
-        "MP": ["DE", "FR"],
-        "Name": ["Beispiel Produkt 1", "Beispiel Produkt 2"],
-        "Product": ["Beispiel Produkt Name 1", "Beispiel Produkt Name 2"],
-        "Titel": ["Beispiel Titel für Produkt 1", "Beispiel Titel für Produkt 2"],
-        "Bullet1": ["Erster Bullet Point", "Erster Bullet Point"],
-        "Bullet2": ["Zweiter Bullet Point", "Zweiter Bullet Point"],
-        "Bullet3": ["Dritter Bullet Point", "Dritter Bullet Point"],
-        "Bullet4": ["Vierter Bullet Point", ""],
-        "Bullet5": ["Fünfter Bullet Point", ""],
-        "Description": ["Dies ist eine Beispiel-Beschreibung für das Produkt.", "Dies ist eine weitere Beispiel-Beschreibung."],
-        "SearchTerms": ["Beispiel, Suchbegriff, Keyword", "Beispiel, Keyword"],
-        "Keywords": ["keyword1, keyword2, keyword3", "keyword1, keyword2"]
-    }
-    df = pd.DataFrame(data)
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False)
-    output.seek(0)
-    return output
-
 def create_example_excel_listings():
     """Erstellt eine Beispiel-Excel-Datei für normale Listings Upload"""
     data = {
@@ -1603,7 +1579,7 @@ if db_engine:
     st.markdown("---")
     st.header("💾 Datenbank-Verwaltung")
     
-    db_tabs = st.tabs(["📊 Gespeicherte Listings", "⬆️ Supabase Upload", "⬆️ Optimierungen hochladen"])
+    db_tabs = st.tabs(["📊 Gespeicherte Listings", "⬆️ Supabase Upload"])
     
     with db_tabs[0]:
         st.subheader("Filter & Suche")
@@ -2018,169 +1994,6 @@ if db_engine:
             except Exception as e:
                 st.error(f"❌ Fehler beim Verarbeiten der Datei: {e}")
                 st.exception(e)
-    
-    with db_tabs[2]:
-        st.subheader("Bestehende Optimierungen hochladen")
-        st.markdown("""
-        Lade eine Excel-Datei hoch, um bestehende Optimierungen in die Datenbank zu importieren.
-        
-        **Erforderliche Spalten:**
-        - `ASIN / EAN / SKU` (oder `ASIN_EAN_SKU`)
-        - `MP` (Marketplace, z.B. DE)
-        - `Account` (optional)
-        - `Project` (optional)
-        - `Name` (Produktname)
-        - `Product`, `Titel`, `Bullet1-5`, `Description`, `SearchTerms`, `Keywords`
-        """)
-        
-        # Beispiel-Datei Download
-        example_file_optimizations = create_example_excel_optimizations()
-        st.download_button(
-            label="📥 Beispiel-Excel herunterladen",
-            data=example_file_optimizations,
-            file_name="beispiel_optimierungen_upload.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            help="Lade eine Beispiel-Excel-Datei herunter, um das richtige Format zu sehen"
-        )
-        st.markdown("---")
-        
-        upload_file_db = st.file_uploader(
-            "📤 Excel-Datei für Datenbank-Upload",
-            type=["xlsx"],
-            key="upload_db"
-        )
-        
-        if upload_file_db:
-            try:
-                upload_df = pd.read_excel(upload_file_db)
-                
-                # Spaltennamen normalisieren - vermeide Duplikate
-                column_mapping = {}
-                used_target_names = set()
-                
-                # Definiere Mapping-Regeln (Zielname -> mögliche Quellspalten)
-                mapping_rules = {
-                    "asin_ean_sku": ["ASIN / EAN / SKU", "ASIN_EAN_SKU", "asin_ean_sku", "ASIN", "EAN", "SKU"],
-                    "mp": ["MP", "mp", "Marketplace", "marketplace"],
-                    "name": ["Name", "name", "Produktname", "produktname"],
-                    "Titel": ["Title", "title", "Titel", "titel"],  # Wichtig: "Titel" mit großem T
-                    "account": ["Account", "account"],
-                    "project": ["Project", "project", "Projekt", "projekt"]
-                }
-                
-                # Finde erste passende Spalte für jeden Zielnamen
-                for target_name, possible_sources in mapping_rules.items():
-                    if target_name not in used_target_names:
-                        for source_name in possible_sources:
-                            if source_name in upload_df.columns:
-                                column_mapping[source_name] = target_name
-                                used_target_names.add(target_name)
-                                break
-                
-                # Zusätzlich: Suche nach ähnlichen Spaltennamen (flexibler)
-                for col in upload_df.columns:
-                    if col not in column_mapping:  # Nur wenn noch nicht gemappt
-                        col_lower = str(col).strip().lower()
-                        target_name = None
-                        
-                        if ("asin" in col_lower or "ean" in col_lower or "sku" in col_lower) and "asin_ean_sku" not in used_target_names:
-                            target_name = "asin_ean_sku"
-                        elif (col_lower == "mp" or "marketplace" in col_lower) and "mp" not in used_target_names:
-                            target_name = "mp"
-                        elif (col_lower == "name" or col_lower == "produktname") and "name" not in used_target_names:
-                            target_name = "name"
-                        elif (col_lower == "title" or col_lower == "titel") and "Titel" not in used_target_names:
-                            target_name = "Titel"  # Wichtig: "Titel" mit großem T für deutsche Bearbeitungsmaske
-                        elif col_lower == "account" and "account" not in used_target_names:
-                            target_name = "account"
-                        elif (col_lower == "project" or col_lower == "projekt") and "project" not in used_target_names:
-                            target_name = "project"
-                        
-                        if target_name:
-                            column_mapping[col] = target_name
-                            used_target_names.add(target_name)
-                
-                upload_df = upload_df.rename(columns=column_mapping)
-                
-                st.success(f"✅ {len(upload_df)} Zeilen erfolgreich geladen")
-                st.dataframe(upload_df.head(), use_container_width=True)
-                
-                if st.button("💾 In Datenbank speichern", key="btn_save_to_db"):
-                    success_count = 0
-                    error_count = 0
-                    
-                    # Erkenne und nummeriere ASIN-Duplikate
-                    asin_counter = {}  # Zählt Vorkommen jeder ASIN
-                    asin_occurrence = {}  # Zählt aktuelle Nummer für jede ASIN
-                    
-                    # Erste Durchlauf: Zähle Vorkommen jeder ASIN
-                    for idx, row in upload_df.iterrows():
-                        asin = str(row.get("asin_ean_sku", "")).strip()
-                        if asin:
-                            asin_counter[asin] = asin_counter.get(asin, 0) + 1
-                    
-                    # Zweiter Durchlauf: Nummeriere Duplikate
-                    duplicate_count = 0
-                    for asin, count in asin_counter.items():
-                        if count > 1:
-                            duplicate_count += count
-                    
-                    if duplicate_count > 0:
-                        st.info(f"ℹ️ **{duplicate_count}** Zeilen mit duplizierten ASIN-Werten gefunden. Diese werden automatisch durchnummeriert (z.B. 'ASIN-1', 'ASIN-2').")
-                    
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    
-                    for idx, row in upload_df.iterrows():
-                        status_text.text(f"Speichere Zeile {idx + 1} von {len(upload_df)}...")
-                        progress_bar.progress((idx + 1) / len(upload_df))
-                        
-                        listing_data = {
-                            "Product": str(row.get("Product", "")),
-                            "Titel": str(row.get("Titel", "")),
-                            "Bullet1": str(row.get("Bullet1", "")),
-                            "Bullet2": str(row.get("Bullet2", "")),
-                            "Bullet3": str(row.get("Bullet3", "")),
-                            "Bullet4": str(row.get("Bullet4", "")),
-                            "Bullet5": str(row.get("Bullet5", "")),
-                            "Description": str(row.get("Description", "")),
-                            "SearchTerms": str(row.get("SearchTerms", "")),
-                            "Keywords": str(row.get("Keywords", "")),
-                            "name": str(row.get("name", "")),
-                            "image": str(row.get("image", "")) if "image" in row else None
-                        }
-                        
-                        asin = str(row.get("asin_ean_sku", "")).strip()
-                        mp = str(row.get("mp", "")).strip()
-                        account = str(row.get("account", "")).strip() if pd.notna(row.get("account")) else None
-                        project = str(row.get("project", "")).strip() if pd.notna(row.get("project")) else None
-                        
-                        if asin and mp:
-                            # Wenn diese ASIN mehrfach vorkommt, nummeriere sie
-                            if asin_counter.get(asin, 0) > 1:
-                                asin_occurrence[asin] = asin_occurrence.get(asin, 0) + 1
-                                # Füge Nummer hinzu: Original-ASIN + "-" + Nummer
-                                numbered_asin = f"{asin}-{asin_occurrence[asin]}"
-                            else:
-                                numbered_asin = asin
-                            
-                            if save_listing_to_db(db_engine, listing_data, numbered_asin, mp, account, project):
-                                success_count += 1
-                            else:
-                                error_count += 1
-                        else:
-                            error_count += 1
-                    
-                    progress_bar.empty()
-                    status_text.empty()
-                    
-                    if success_count > 0:
-                        st.success(f"✅ {success_count} Listings erfolgreich gespeichert!")
-                    if error_count > 0:
-                        st.warning(f"⚠️ {error_count} Listings konnten nicht gespeichert werden (fehlende ASIN/MP)")
-                    
-            except Exception as e:
-                st.error(f"Fehler beim Verarbeiten der Datei: {e}")
 
 # ================== Rest: Vorhandene App-Funktionen (Upload, Bearbeitung, Export) ==================
 
