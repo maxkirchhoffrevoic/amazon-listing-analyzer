@@ -2275,7 +2275,79 @@ def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
                 key=f"product_{key_suffix}",
                 on_change=_keep_open_expander
             )
-
+            
+            # Metadaten-Felder: ASIN, MP, Account, Project
+            st.markdown("---")
+            st.markdown("**Metadaten:**")
+            
+            # ASIN/EAN/SKU Feld mit Tooltip
+            asin_key = f"asin_{key_suffix}"
+            default_asin = str(row.get("asin_ean_sku", "")).strip() if row.get("asin_ean_sku") else ""
+            if asin_key not in st.session_state:
+                st.session_state[asin_key] = default_asin
+            st.text_input(
+                "ASIN/EAN/SKU",
+                value=st.session_state[asin_key],
+                key=asin_key,
+                help="Bei noch nicht existenter oder fehlender ASIN einfach der Produktname genutzt werden soll",
+                on_change=_keep_open_expander
+            )
+            
+            # Marketplace (MP) - Selectbox mit verfügbaren Marktplätzen
+            mp_key = f"mp_{key_suffix}"
+            default_mp = str(row.get("mp", "")).strip() if row.get("mp") else ""
+            # Lade verfügbare Marktplätze aus der Datenbank
+            available_mps = get_distinct_values(db_engine, "mp") if db_engine else []
+            # Stelle sicher, dass der aktuelle MP in der Liste ist
+            if default_mp and default_mp not in available_mps:
+                available_mps = [default_mp] + available_mps
+            # Wenn keine Marktplätze verfügbar, füge Standard-Marktplätze hinzu
+            if not available_mps:
+                available_mps = ["DE", "FR", "UK", "IT", "ES", "US", "CA"]
+            # Stelle sicher, dass mindestens ein Wert ausgewählt ist
+            if mp_key not in st.session_state:
+                st.session_state[mp_key] = default_mp if default_mp else (available_mps[0] if available_mps else "")
+            current_mp = st.session_state[mp_key]
+            # Finde Index des aktuellen MP
+            try:
+                mp_index = available_mps.index(current_mp) if current_mp in available_mps else 0
+            except (ValueError, IndexError):
+                mp_index = 0
+            selected_mp = st.selectbox(
+                "Marketplace (MP)",
+                options=available_mps,
+                index=mp_index,
+                key=mp_key,
+                help="Wähle den Marktplatz für dieses Listing",
+                on_change=_keep_open_expander
+            )
+            st.session_state[mp_key] = selected_mp
+            
+            # Account (optional)
+            account_key = f"account_{key_suffix}"
+            default_account = str(row.get("account", "")).strip() if row.get("account") else ""
+            if account_key not in st.session_state:
+                st.session_state[account_key] = default_account
+            st.text_input(
+                "Account (optional)",
+                value=st.session_state[account_key],
+                key=account_key,
+                on_change=_keep_open_expander
+            )
+            
+            # Project (optional)
+            project_key = f"project_{key_suffix}"
+            default_project = str(row.get("project", "")).strip() if row.get("project") else ""
+            if project_key not in st.session_state:
+                st.session_state[project_key] = default_project
+            st.text_input(
+                "Project (optional)",
+                value=st.session_state[project_key],
+                key=project_key,
+                on_change=_keep_open_expander
+            )
+            
+            st.markdown("---")
             st.markdown(f"### ✏️ Keywords für {st.session_state[f'product_{key_suffix}']}")
             keywords_raw = str(row.get("Keywords", ""))
             keywords_input = st.text_area("Keywords (Komma oder Zeilenumbruch)", value=keywords_raw, key=f"kw_input_{key_suffix}")
@@ -2311,6 +2383,11 @@ def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
                 listing_data[fname] = render_field(fname, lim)
             listing_data["Keywords"] = keywords_input
             listing_data["Product"] = st.session_state.get(f"product_{key_suffix}", default_name)
+            # Metadaten hinzufügen
+            listing_data["asin_ean_sku"] = st.session_state.get(f"asin_{key_suffix}", "")
+            listing_data["mp"] = st.session_state.get(f"mp_{key_suffix}", "")
+            listing_data["account"] = st.session_state.get(f"account_{key_suffix}", "")
+            listing_data["project"] = st.session_state.get(f"project_{key_suffix}", "")
 
         # Live-Keyword-Chips (links), basierend auf aktuellem Content
         all_text = " ".join(
@@ -2343,12 +2420,21 @@ if uploaded_file:
             expected_cols = ["Titel","Bullet1","Bullet2","Bullet3","Bullet4","Bullet5","Description","SearchTerms","Keywords"]
             cols_lower = [str(c).strip().lower() for c in df.columns]
 
-            # Normalisiere Spaltennamen - mappe "Title" auf "Titel"
+            # Normalisiere Spaltennamen - mappe "Title" auf "Titel" und Metadaten-Spalten
             column_normalization = {}
             for col in df.columns:
                 col_lower = str(col).strip().lower()
                 if col_lower == "title" and col != "Titel":  # Nur wenn noch nicht "Titel"
                     column_normalization[col] = "Titel"
+                # Normalisiere Metadaten-Spalten
+                elif ("asin" in col_lower or "ean" in col_lower or "sku" in col_lower) and col != "asin_ean_sku":
+                    column_normalization[col] = "asin_ean_sku"
+                elif (col_lower == "mp" or col_lower == "marketplace") and col != "mp":
+                    column_normalization[col] = "mp"
+                elif col_lower == "account" and col != "account":
+                    column_normalization[col] = "account"
+                elif (col_lower == "project" or col_lower == "projekt") and col != "project":
+                    column_normalization[col] = "project"
             
             if column_normalization:
                 df = df.rename(columns=column_normalization)
@@ -2881,45 +2967,79 @@ if updated_rows_all:
     with col2:
         if db_engine:
             st.subheader("💾 In Datenbank speichern")
-            st.markdown("**Metadaten für alle Listings:**")
-            
-            default_account = st.session_state.get("save_account", "")
-            default_project = st.session_state.get("save_project", "")
-            
-            save_account = st.text_input("Account (optional)", value=default_account, key="save_account")
-            save_project = st.text_input("Project (optional)", value=default_project, key="save_project")
-            
-            st.markdown("**Für jedes Listing benötigt:** ASIN/EAN/SKU und Marketplace (MP)")
-            st.info("💡 Die Metadaten (ASIN, MP) müssen in der Excel-Datei enthalten sein oder hier für alle Listings gleich sein.")
-            
-            # Option: Metadaten aus Excel oder manuell
-            use_excel_metadata = st.checkbox("Metadaten aus Excel-Spalten verwenden (ASIN_EAN_SKU, MP)", value=True)
-            
-            if not use_excel_metadata:
-                save_asin = st.text_input("ASIN/EAN/SKU (für alle Listings)", key="save_asin")
-                save_mp = st.text_input("Marketplace (MP, z.B. DE)", key="save_mp")
-            else:
-                save_asin = None
-                save_mp = None
+            st.markdown("**Hinweis:** Die Metadaten (ASIN, MP, Account, Project) werden aus den einzelnen Bearbeitungsmasken verwendet.")
+            st.info("💡 Jedes Listing benötigt ASIN/EAN/SKU und Marketplace (MP). Diese können in jeder Bearbeitungsmaske individuell gesetzt werden.")
             
             if st.button("💾 Alle Listings in Datenbank speichern", key="btn_save_all"):
-                if use_excel_metadata:
-                    # Versuche Metadaten aus DataFrame zu lesen
-                    asin_cols = [c for c in result_df.columns if "asin" in c.lower() or "ean" in c.lower() or "sku" in c.lower()]
-                    mp_cols = [c for c in result_df.columns if c.upper() == "MP" or c.lower() == "marketplace"]
+                # Metadaten werden aus den einzelnen listing_data Objekten gelesen
+                # Erkenne und nummeriere ASIN-Duplikate
+                asin_counter = {}  # Zählt Vorkommen jeder ASIN
+                asin_occurrence = {}  # Zählt aktuelle Nummer für jede ASIN
+                
+                # Erste Durchlauf: Zähle Vorkommen jeder ASIN aus updated_rows_all
+                for listing_data in updated_rows_all:
+                    asin = str(listing_data.get("asin_ean_sku", "")).strip()
+                    if not asin:
+                        # Falls keine ASIN, verwende Product-Name
+                        asin = str(listing_data.get("Product", "")).strip()
+                    if asin:
+                        asin_counter[asin] = asin_counter.get(asin, 0) + 1
+                
+                # Zweiter Durchlauf: Nummeriere Duplikate
+                duplicate_count = 0
+                for asin, count in asin_counter.items():
+                    if count > 1:
+                        duplicate_count += count
+                
+                if duplicate_count > 0:
+                    st.info(f"ℹ️ **{duplicate_count}** Zeilen mit duplizierten ASIN-Werten gefunden. Diese werden automatisch durchnummeriert (z.B. 'ASIN-1', 'ASIN-2').")
+                
+                success_count = 0
+                error_count = 0
+                
+                for listing_data in updated_rows_all:
+                    asin = str(listing_data.get("asin_ean_sku", "")).strip()
+                    if not asin:
+                        # Falls keine ASIN, verwende Product-Name
+                        asin = str(listing_data.get("Product", "")).strip()
+                    mp = str(listing_data.get("mp", "")).strip()
+                    account = str(listing_data.get("account", "")).strip() or None
+                    project = str(listing_data.get("project", "")).strip() or None
                     
-                    if not asin_cols or not mp_cols:
-                        st.error("❌ Excel-Datei muss Spalten 'ASIN_EAN_SKU' (oder ähnlich) und 'MP' enthalten, wenn 'Metadaten aus Excel verwenden' aktiviert ist.")
-                    else:
-                        # Erkenne und nummeriere ASIN-Duplikate
-                        asin_counter = {}  # Zählt Vorkommen jeder ASIN
-                        asin_occurrence = {}  # Zählt aktuelle Nummer für jede ASIN
+                    if asin and mp:
+                        # Wenn diese ASIN mehrfach vorkommt, nummeriere sie
+                        if asin_counter.get(asin, 0) > 1:
+                            asin_occurrence[asin] = asin_occurrence.get(asin, 0) + 1
+                            # Füge Nummer hinzu: Original-ASIN + "-" + Nummer
+                            numbered_asin = f"{asin}-{asin_occurrence[asin]}"
+                        else:
+                            numbered_asin = asin
                         
-                        # Erste Durchlauf: Zähle Vorkommen jeder ASIN
-                        for idx, row in result_df.iterrows():
-                            asin = str(row[asin_cols[0]]).strip() if pd.notna(row[asin_cols[0]]) else ""
-                            if asin:
-                                asin_counter[asin] = asin_counter.get(asin, 0) + 1
+                        # Erstelle listing_data für save_listing_to_db (ohne Metadaten)
+                        listing_data_for_db = {
+                            "Product": str(listing_data.get("Product", "")),
+                            "Titel": str(listing_data.get("Titel", "")),
+                            "Bullet1": str(listing_data.get("Bullet1", "")),
+                            "Bullet2": str(listing_data.get("Bullet2", "")),
+                            "Bullet3": str(listing_data.get("Bullet3", "")),
+                            "Bullet4": str(listing_data.get("Bullet4", "")),
+                            "Bullet5": str(listing_data.get("Bullet5", "")),
+                            "Description": str(listing_data.get("Description", "")),
+                            "SearchTerms": str(listing_data.get("SearchTerms", "")),
+                            "Keywords": str(listing_data.get("Keywords", ""))
+                        }
+                        
+                        if save_listing_to_db(db_engine, listing_data_for_db, numbered_asin, mp, account, project):
+                            success_count += 1
+                        else:
+                            error_count += 1
+                    else:
+                        error_count += 1
+                
+                if success_count > 0:
+                    st.success(f"✅ {success_count} Listings erfolgreich gespeichert!")
+                if error_count > 0:
+                    st.warning(f"⚠️ {error_count} Listings konnten nicht gespeichert werden (fehlende ASIN/MP)")
                         
                         # Zweiter Durchlauf: Nummeriere Duplikate
                         duplicate_count = 0
