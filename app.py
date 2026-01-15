@@ -19,52 +19,107 @@ except Exception:
 
 # Database connection
 def get_db_connection():
-    """Erstellt eine Datenbankverbindung zur Supabase PostgreSQL Datenbank"""
+    """
+    Erstellt eine Datenbankverbindung zur lokalen oder Supabase PostgreSQL Datenbank.
+    Unterstützt lokale Datenbank für bessere Performance ohne Wartezeiten.
+    """
     try:
-        # Passwort aus Streamlit secrets oder Umgebungsvariable holen
-        db_password = None
+        # Datenbank-Modus bestimmen (Standard: supabase - aktuelle Lösung)
+        db_mode = os.getenv("DB_MODE", "supabase")
         
-        # Zuerst Streamlit secrets versuchen (für lokale Entwicklung)
+        # Versuche Streamlit secrets
         try:
-            if "supabase_db_password" in st.secrets:
-                db_password = st.secrets["supabase_db_password"]
+            if hasattr(st, 'secrets') and "db_mode" in st.secrets:
+                db_mode = st.secrets["db_mode"]
         except Exception:
             pass
         
         # Falls nicht in secrets, versuche Umgebungsvariable
-        if not db_password:
-            db_password = os.getenv("SUPABASE_DB_PASSWORD")
+        if not db_mode or db_mode == "":
+            db_mode = os.getenv("DB_MODE", "supabase")
         
-        if not db_password:
-            return None
+        # Lokale Datenbank-Verbindung
+        if db_mode.lower() == "local":
+            # Lokale DB-Konfiguration aus Umgebungsvariablen oder Streamlit secrets
+            db_host = os.getenv("DB_HOST", "localhost")
+            db_port = os.getenv("DB_PORT", "5432")
+            db_name = os.getenv("DB_NAME", "amazon_listings")
+            db_user = os.getenv("DB_USER", "postgres")
+            db_password = os.getenv("DB_PASSWORD", "postgres")
+            
+            # Versuche Streamlit secrets für lokale DB
+            try:
+                if hasattr(st, 'secrets'):
+                    if "db_host" in st.secrets:
+                        db_host = st.secrets["db_host"]
+                    if "db_port" in st.secrets:
+                        db_port = st.secrets["db_port"]
+                    if "db_name" in st.secrets:
+                        db_name = st.secrets["db_name"]
+                    if "db_user" in st.secrets:
+                        db_user = st.secrets["db_user"]
+                    if "db_password" in st.secrets:
+                        db_password = st.secrets["db_password"]
+            except Exception:
+                pass
+            
+            # Connection String für lokale Datenbank
+            connection_string = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+            
+            # Optimierte Pool-Einstellungen für lokale Datenbank
+            engine = create_engine(
+                connection_string,
+                pool_pre_ping=True,  # Prüft Connection vor Verwendung
+                pool_recycle=3600,   # Recyclet Connections nach 1 Stunde
+                pool_size=10,        # Mehr Connections für lokale DB
+                max_overflow=20,      # Mehr zusätzliche Connections
+                pool_timeout=10,     # Kürzerer Timeout für lokale DB
+                connect_args={
+                    "connect_timeout": 5,  # Kürzerer Timeout für lokale DB
+                }
+            )
+            return engine
         
-        # Connection String zusammenbauen
-        # WICHTIG: Verwende direkte Connection statt Pooler für konsistente Reads
-        # Pooler: aws-1-eu-west-1.pooler.supabase.com (kann zu Read-Replica-Problemen führen)
-        # Direkt: aws-1-eu-west-1.pooler.supabase.com -> muss zur direkten Connection geändert werden
-        # Für Supabase: Direkte Connection verwenden (Port 5432 ohne .pooler)
-        # Versuche zuerst direkte Connection, falls verfügbar
-        connection_string = f"postgresql://postgres.povudekejufidhyuinro:{db_password}@aws-1-eu-west-1.pooler.supabase.com:5432/postgres"
-        
-        # Alternative: Direkte Connection (falls Supabase direkten Zugriff erlaubt)
-        # connection_string_direct = f"postgresql://postgres.povudekejufidhyuinro:{db_password}@db.povudekejufidhyuinro.supabase.co:5432/postgres"
-        # Verbesserte Pool-Einstellungen für große Datenmengen
-        engine = create_engine(
-            connection_string,
-            pool_pre_ping=True,  # Prüft Connection vor Verwendung
-            pool_recycle=300,    # Recyclet Connections nach 5 Minuten
-            pool_size=5,         # Anzahl der Connections im Pool
-            max_overflow=10,     # Zusätzliche Connections bei Bedarf
-            pool_timeout=30,     # Timeout für Connection-Erstellung
-            connect_args={
-                "connect_timeout": 10,
-                "keepalives": 1,
-                "keepalives_idle": 30,
-                "keepalives_interval": 10,
-                "keepalives_count": 5
-            }
-        )
-        return engine
+        # Supabase-Verbindung (Fallback)
+        else:
+            # Passwort aus Streamlit secrets oder Umgebungsvariable holen
+            db_password = None
+            
+            # Zuerst Streamlit secrets versuchen
+            try:
+                if hasattr(st, 'secrets') and "supabase_db_password" in st.secrets:
+                    db_password = st.secrets["supabase_db_password"]
+            except Exception:
+                pass
+            
+            # Falls nicht in secrets, versuche Umgebungsvariable
+            if not db_password:
+                db_password = os.getenv("SUPABASE_DB_PASSWORD")
+            
+            if not db_password:
+                return None
+            
+            # Connection String für Supabase
+            connection_string = f"postgresql://postgres.povudekejufidhyuinro:{db_password}@aws-1-eu-west-1.pooler.supabase.com:5432/postgres"
+            
+            # Verbesserte Pool-Einstellungen für große Datenmengen (Supabase)
+            engine = create_engine(
+                connection_string,
+                pool_pre_ping=True,  # Prüft Connection vor Verwendung
+                pool_recycle=300,    # Recyclet Connections nach 5 Minuten
+                pool_size=5,         # Anzahl der Connections im Pool
+                max_overflow=10,     # Zusätzliche Connections bei Bedarf
+                pool_timeout=30,     # Timeout für Connection-Erstellung
+                connect_args={
+                    "connect_timeout": 10,
+                    "keepalives": 1,
+                    "keepalives_idle": 30,
+                    "keepalives_interval": 10,
+                    "keepalives_count": 5
+                }
+            )
+            return engine
+            
     except Exception as e:
         # Fehler nicht anzeigen, nur None zurückgeben (wird später gehandhabt)
         return None
@@ -446,6 +501,233 @@ def create_example_excel_listings():
         df.to_excel(writer, index=False)
     output.seek(0)
     return output
+
+def create_example_excel_ai_generation(db_engine=None):
+    """Erstellt eine Beispiel-Excel-Datei für KI-Generierung mit Dropdown-Auswahlfeldern"""
+    # Lade verfügbare Brand Guidelines aus der Datenbank
+    brand_guidelines_options = ["-- Keine --"]
+    if db_engine:
+        try:
+            with db_engine.connect() as conn:
+                result = conn.execute(text("SELECT name FROM public.brand_guidelines ORDER BY name"))
+                guidelines = [row[0] for row in result.fetchall()]
+                brand_guidelines_options.extend(guidelines)
+        except Exception:
+            pass
+    
+    # Standard-Marketplace-Optionen
+    marketplace_options = ["DE", "FR", "UK", "IT", "ES", "US", "CA"]
+    
+    # Erstelle Beispiel-Daten
+    data = {
+        "Produktname": ["Brotbox Edelstahl", "Wasserkocher Glas"],
+        "Produktspezifikationen": [
+            "1.2 L Volumen, BPA-frei, Farbe Silber, Maße 20x15x8 cm, Material: Edelstahl 18/10",
+            "1.7 L Fassungsvermögen, Borosilikatglas, 2000W Leistung, Schnellkochen"
+        ],
+        "USPs": [
+            "Auslaufsicher, spülmaschinenfest, umweltfreundlich, langlebig, geruchsneutral",
+            "Schnellkochen, sicher, leicht zu reinigen, stilvolles Design"
+        ],
+        "Zielgruppe": [
+            "Gesundheitsbewusste Verbraucher, Familien, Preis-Leistungs-Orientiert",
+            "Moderne Haushalte, Design-Liebhaber, Qualitätsbewusst"
+        ],
+        "Saisonalitäten": [
+            "Besonders beliebt im Sommer",
+            ""
+        ],
+        "Kundenbewertungen": [
+            "Kunden fragen oft nach Kompatibilität mit Geschirrspüler",
+            "Häufige Frage nach Schnellkoch-Funktion"
+        ],
+        "Brand Guidelines": [brand_guidelines_options[0], brand_guidelines_options[0]],
+        "Marketplace": [marketplace_options[0], marketplace_options[1]],
+        "Keywords": [
+            "brotbox edelstahl, lunchbox, meal prep, auslaufsicher",
+            "wasserkocher glas, schnellkochen, borosilikatglas"
+        ]
+    }
+    
+    df = pd.DataFrame(data)
+    output = BytesIO()
+    
+    # Erstelle Excel mit Dropdown-Validierung
+    try:
+        from openpyxl.worksheet.datavalidation import DataValidation
+    except ImportError:
+        # Fallback wenn openpyxl nicht verfügbar ist
+        DataValidation = None
+    
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="KI-Generierung")
+        
+        # Hole das Worksheet
+        worksheet = writer.sheets["KI-Generierung"]
+        
+        # Erstelle Dropdown-Validierung für Brand Guidelines (falls verfügbar)
+        if DataValidation:
+            # Brand Guidelines Dropdown (Spalte G, Index 7)
+            brand_guidelines_dv = DataValidation(
+                type="list",
+                formula1=f'"{",".join(brand_guidelines_options)}"',
+                allow_blank=True
+            )
+            brand_guidelines_dv.add(f"G2:G{len(df) + 10}")  # Erlaube mehr Zeilen für zukünftige Nutzung
+            worksheet.add_data_validation(brand_guidelines_dv)
+            
+            # Marketplace Dropdown (Spalte H, Index 8)
+            marketplace_dv = DataValidation(
+                type="list",
+                formula1=f'"{",".join(marketplace_options)}"',
+                allow_blank=False
+            )
+            marketplace_dv.add(f"H2:H{len(df) + 10}")
+            worksheet.add_data_validation(marketplace_dv)
+        
+        # Setze Spaltenbreiten für bessere Lesbarkeit
+        worksheet.column_dimensions['A'].width = 20
+        worksheet.column_dimensions['B'].width = 50
+        worksheet.column_dimensions['C'].width = 50
+        worksheet.column_dimensions['D'].width = 40
+        worksheet.column_dimensions['E'].width = 30
+        worksheet.column_dimensions['F'].width = 40
+        worksheet.column_dimensions['G'].width = 25
+        worksheet.column_dimensions['H'].width = 15
+        worksheet.column_dimensions['I'].width = 40
+    
+    output.seek(0)
+    return output
+
+def load_brand_guidelines_by_name(db_engine, guideline_name):
+    """Lädt Brand Guidelines aus der Datenbank anhand des Namens"""
+    if not db_engine or not guideline_name or guideline_name == "-- Keine --":
+        return None
+    
+    try:
+        with db_engine.connect() as conn:
+            result = conn.execute(
+                text("SELECT * FROM public.brand_guidelines WHERE name = :name"),
+                {"name": guideline_name}
+            )
+            row = result.fetchone()
+            if row:
+                return {
+                    "brand_name_format": row[3] or "",
+                    "required_formulations": row[4] or "",
+                    "forbidden_terms": row[5] or "",
+                    "customer_feedback": row[6] or ""
+                }
+    except Exception:
+        pass
+    return None
+
+def process_ai_generation_excel(uploaded_file, db_engine=None):
+    """Verarbeitet eine hochgeladene Excel-Datei für KI-Generierung"""
+    try:
+        # Lade Excel-Datei
+        df = pd.read_excel(uploaded_file, engine="openpyxl")
+        
+        # Normalisiere Spaltennamen (ignoriere Groß-/Kleinschreibung und Leerzeichen)
+        df.columns = df.columns.str.strip()
+        
+        # Erwartete Spalten
+        required_cols = ["Produktname", "Marketplace"]
+        optional_cols = {
+            "Produktspezifikationen": "Produktspezifikationen",
+            "USPs": "USPs",
+            "Zielgruppe": "Zielgruppe",
+            "Saisonalitäten": "Saisonalitäten",
+            "Kundenbewertungen": "Kundenbewertungen",
+            "Brand Guidelines": "Brand Guidelines",
+            "Keywords": "Keywords"
+        }
+        
+        # Prüfe ob alle erforderlichen Spalten vorhanden sind
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            return None, f"Fehlende erforderliche Spalten: {', '.join(missing_cols)}"
+        
+        # Verarbeite jede Zeile
+        generated_listings = []
+        errors = []
+        
+        for idx, row in df.iterrows():
+            try:
+                # Sammle Input-Daten für KI-Generierung
+                product_name = str(row.get("Produktname", "")).strip()
+                marketplace = str(row.get("Marketplace", "")).strip()
+                
+                if not product_name:
+                    errors.append(f"Zeile {idx + 2}: Produktname fehlt")
+                    continue
+                
+                if not marketplace:
+                    errors.append(f"Zeile {idx + 2}: Marketplace fehlt")
+                    continue
+                
+                # Lade Brand Guidelines falls angegeben
+                guideline_name = str(row.get("Brand Guidelines", "")).strip()
+                brand_guidelines = None
+                if guideline_name and guideline_name != "-- Keine --" and guideline_name != "nan":
+                    brand_guidelines = load_brand_guidelines_by_name(db_engine, guideline_name)
+                
+                # Baue Input-Daten für KI-Generierung
+                input_data = {
+                    "product_name": product_name,
+                    "product_specs": str(row.get("Produktspezifikationen", "")).strip(),
+                    "usps": str(row.get("USPs", "")).strip(),
+                    "target_audience": str(row.get("Zielgruppe", "")).strip(),
+                    "customer_feedback": str(row.get("Kundenbewertungen", "")).strip(),
+                    "seasonal_info": str(row.get("Saisonalitäten", "")).strip(),
+                    "keywords": str(row.get("Keywords", "")).strip(),
+                    "brand_name_format": brand_guidelines.get("brand_name_format", "") if brand_guidelines else "",
+                    "required_formulations": brand_guidelines.get("required_formulations", "") if brand_guidelines else "",
+                    "forbidden_terms": brand_guidelines.get("forbidden_terms", "") if brand_guidelines else "",
+                }
+                
+                # Prüfe ob mindestens Grundinformationen vorhanden sind
+                has_basic_info = (
+                    input_data["product_name"].strip() or 
+                    input_data["product_specs"].strip() or 
+                    input_data["usps"].strip()
+                )
+                
+                if not has_basic_info:
+                    errors.append(f"Zeile {idx + 2}: Mindestens Produktname, Produktspezifikationen oder USPs müssen ausgefüllt sein")
+                    continue
+                
+                # Generiere Listing mit KI
+                prompt = _build_prompt(input_data)
+                result = _call_openai_and_parse(prompt)
+                
+                if result:
+                    # Erstelle Listing-Datenstruktur
+                    listing_data = {
+                        "Product": product_name,
+                        "Titel": result.get("Titel", ""),
+                        "Bullet1": result.get("Bullet1", ""),
+                        "Bullet2": result.get("Bullet2", ""),
+                        "Bullet3": result.get("Bullet3", ""),
+                        "Bullet4": result.get("Bullet4", ""),
+                        "Bullet5": result.get("Bullet5", ""),
+                        "Description": result.get("Description", ""),
+                        "SearchTerms": result.get("SearchTerms", ""),
+                        "Keywords": input_data["keywords"],
+                        "mp": marketplace,  # Verwende "mp" statt "Marketplace" für Kompatibilität mit render_listing
+                    }
+                    generated_listings.append(listing_data)
+                else:
+                    errors.append(f"Zeile {idx + 2}: KI-Generierung fehlgeschlagen")
+                    
+            except Exception as e:
+                errors.append(f"Zeile {idx + 2}: {str(e)}")
+                continue
+        
+        return generated_listings, errors
+        
+    except Exception as e:
+        return None, f"Fehler beim Lesen der Excel-Datei: {str(e)}"
 
 st.set_page_config(
     page_title="Amazon Listing Editor",
@@ -1631,6 +1913,57 @@ if st.button("✨ Listing automatisch erstellen (ChatGPT – gpt-5)"):
                 "Keywords": keywords_for_listing
             })
             st.success("Inhalte generiert. Scrolle nach unten – das Listing erscheint in der Bearbeitungsmaske.")
+
+# ========= NEU: Excel-basierte KI-Generierung =========
+st.markdown("---")
+st.markdown("### 📊 Batch-KI-Generierung per Excel")
+
+st.info("💡 **Hinweis:** Lade eine Excel-Datei hoch, um mehrere Listings gleichzeitig mit KI zu generieren. Die Excel-Datei sollte die erforderlichen Felder enthalten. Nach der Generierung werden alle Listings automatisch in den Bearbeitungsmasken geöffnet.")
+
+col_download, col_upload = st.columns([1, 2])
+
+with col_download:
+    st.markdown("#### 📥 Beispiel-Excel herunterladen")
+    example_excel = create_example_excel_ai_generation(db_engine)
+    st.download_button(
+        label="📥 Beispiel-Excel für KI-Generierung",
+        data=example_excel,
+        file_name="beispiel_ki_generierung.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        help="Lade eine Beispiel-Excel-Datei herunter, um die Struktur zu sehen"
+    )
+
+with col_upload:
+    st.markdown("#### ⬆️ Excel-Datei hochladen")
+    uploaded_file = st.file_uploader(
+        "Excel-Datei für KI-Generierung hochladen",
+        type=["xlsx"],
+        help="Lade eine Excel-Datei hoch, die die Produktinformationen für die KI-Generierung enthält"
+    )
+    
+    if uploaded_file:
+        if st.button("🚀 KI-Generierung starten", type="primary", use_container_width=True):
+            with st.spinner("🤖 Verarbeite Excel und generiere Listings..."):
+                generated_listings, errors = process_ai_generation_excel(uploaded_file, db_engine)
+                
+                if generated_listings is None:
+                    st.error(f"❌ Fehler beim Verarbeiten der Excel-Datei: {errors}")
+                else:
+                    if errors:
+                        st.warning(f"⚠️ {len(errors)} Fehler aufgetreten:")
+                        with st.expander("Fehler-Details anzeigen"):
+                            for error in errors:
+                                st.text(error)
+                    
+                    if generated_listings:
+                        # Füge alle generierten Listings zu generated_rows hinzu
+                        for listing in generated_listings:
+                            st.session_state["generated_rows"].append(listing)
+                        
+                        st.success(f"✅ {len(generated_listings)} Listing(s) erfolgreich generiert! Scrolle nach unten – die Bearbeitungsmasken werden automatisch geöffnet.")
+                        st.rerun()
+                    else:
+                        st.error("❌ Keine Listings konnten generiert werden. Bitte prüfe die Excel-Datei und die Fehlermeldungen.")
 
 # ================== DATENBANK-FUNKTIONEN ==================
 
