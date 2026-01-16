@@ -3145,6 +3145,56 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
         st.session_state["db_listings_for_edit"] = []
         st.session_state["db_listings_edited"] = {}
         st.rerun()
+    
+    # Excel-Export für bearbeitete Listings aus Datenbank
+    if st.session_state.get("db_listings_edited"):
+        st.markdown("---")
+        st.subheader("📥 Excel-Export")
+        
+        # Konvertiere bearbeitete Listings zu DataFrame
+        export_rows = []
+        for listing_id, edited_info in st.session_state["db_listings_edited"].items():
+            edited_data = edited_info["data"]
+            original_listing = edited_info["original"]
+            
+            # Verwende geändertes MP aus session_state, falls vorhanden
+            safe_listing_id_export = re.sub(r'[^a-zA-Z0-9_]', '_', str(listing_id))
+            mp_key_export = f"mp_{safe_listing_id_export}"
+            mp = st.session_state.get(mp_key_export, original_listing.get("mp", ""))
+            
+            export_row = {
+                "ASIN / EAN / SKU": original_listing.get("asin_ean_sku", ""),
+                "MP": mp,
+                "Name": edited_data.get("Product", ""),
+                "Titel": edited_data.get("Titel", ""),
+                "Account": original_listing.get("account", ""),
+                "Project": original_listing.get("project", ""),
+                "Image": original_listing.get("image", ""),
+                "Bullet1": edited_data.get("Bullet1", ""),
+                "Bullet2": edited_data.get("Bullet2", ""),
+                "Bullet3": edited_data.get("Bullet3", ""),
+                "Bullet4": edited_data.get("Bullet4", ""),
+                "Bullet5": edited_data.get("Bullet5", ""),
+                "Description": edited_data.get("Description", ""),
+                "SearchTerms": edited_data.get("SearchTerms", ""),
+                "Keywords": edited_data.get("Keywords", "")
+            }
+            export_rows.append(export_row)
+        
+        if export_rows:
+            export_df = pd.DataFrame(export_rows)
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                export_df.to_excel(writer, index=False)
+            output.seek(0)
+            
+            st.download_button(
+                label="📥 Bearbeitete Listings als Excel herunterladen",
+                data=output,
+                file_name=f"bearbeitete_listings_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Lade alle bearbeiteten Listings als Excel-Datei herunter"
+            )
 
 # --- Download (Export) ---
 if updated_rows_all:
