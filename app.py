@@ -2434,7 +2434,11 @@ updated_rows_all = []  # Sammelbecken für Upload-Listings + generierte Listings
 def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
     """Rendert ein Listing-Panel und gibt das (ggf. bearbeitete) Dict zurück."""
     # Verwende listing_id für eindeutige Keys, falls vorhanden, sonst Index
-    key_suffix = listing_id if listing_id else str(i)
+    # Stelle sicher, dass der Key sicher ist (nur alphanumerische Zeichen und Unterstriche)
+    if listing_id:
+        key_suffix = re.sub(r'[^a-zA-Z0-9_]', '_', str(listing_id))
+    else:
+        key_suffix = str(i)
     
     # Generiere default_name - verwende Product falls vorhanden, sonst einen beschreibenden Namen
     product_value = str(row.get("Product", "")).strip()
@@ -2911,6 +2915,10 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
     for idx, db_listing in enumerate(st.session_state["db_listings_for_edit"]):
         listing_id = db_listing.get("id", str(idx))
         
+        # Erstelle einen sicheren Key für Session State (nur alphanumerische Zeichen und Unterstriche)
+        # Entferne alle ungültigen Zeichen aus listing_id
+        safe_listing_id = re.sub(r'[^a-zA-Z0-9_]', '_', str(listing_id))
+        
         # Generiere einen sinnvollen Namen für das Listing (Fallback-Kette)
         # Verwende str() um sicherzustellen, dass wir immer einen String haben (auch wenn Wert None ist)
         listing_name = (
@@ -2923,7 +2931,7 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
         # Metadaten für Expander-Header
         asin = db_listing.get('asin_ean_sku', 'N/A')
         # Verwende geändertes MP aus session_state, falls vorhanden
-        mp_key = f"mp_{listing_id}"
+        mp_key = f"mp_{safe_listing_id}"
         mp = st.session_state.get(mp_key, db_listing.get('mp', 'N/A'))
         listing_label = f"{listing_name} - {asin} ({mp})"
         
@@ -2941,7 +2949,7 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                 if current_mp and current_mp not in available_mps:
                     available_mps = [current_mp] + available_mps
                 # Speichere geändertes MP in session_state
-                mp_key = f"mp_{listing_id}"
+                # Verwende safe_listing_id für Session State Key
                 if mp_key not in st.session_state:
                     st.session_state[mp_key] = current_mp
                 selected_mp = st.selectbox(
@@ -2959,7 +2967,7 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                 st.info(f"**Project:** {db_listing.get('project', 'N/A')}")
             with col5:
                 # Button zum Entfernen
-                if st.button("🗑️ Entfernen", key=f"btn_remove_{listing_id}", type="secondary", use_container_width=True):
+                if st.button("🗑️ Entfernen", key=f"btn_remove_{safe_listing_id}", type="secondary", use_container_width=True):
                     st.session_state["db_listings_for_edit"] = [
                         l for l in st.session_state["db_listings_for_edit"] 
                         if l.get("id") != listing_id
@@ -2994,16 +3002,15 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
             # Verwende die ersten 8 Zeichen der UUID als Hexadezimalzahl für einen stabilen, eindeutigen Index
             try:
                 # Entferne Bindestriche und nimm erste 8 Zeichen, konvertiere zu int
-                uuid_clean = listing_id.replace("-", "")[:8]
+                uuid_clean = str(listing_id).replace("-", "")[:8]
                 db_listing_index = int(uuid_clean, 16) % 10000000  # Modulo um Index zu begrenzen, aber groß genug für Eindeutigkeit
             except (ValueError, AttributeError):
                 # Fallback: Verwende Hash wenn UUID-Konvertierung fehlschlägt
-                db_listing_index = abs(hash(listing_id)) % 10000000
+                db_listing_index = abs(hash(str(listing_id))) % 10000000
             
-            # Wichtig: Verwende listing_id als Präfix für alle Keys, um Eindeutigkeit sicherzustellen
-            # Passe render_listing an, um listing_id zu verwenden
+            # Wichtig: Verwende safe_listing_id für Session State Keys in render_listing
             # skip_expander=True, da wir bereits in einem Expander sind
-            edited_listing_data = render_listing(listing_for_render, db_listing_index, has_product=True, listing_id=listing_id, skip_expander=True)
+            edited_listing_data = render_listing(listing_for_render, db_listing_index, has_product=True, listing_id=safe_listing_id, skip_expander=True)
             
             # Speichere bearbeitete Daten
             st.session_state["db_listings_edited"][listing_id] = {
@@ -3085,7 +3092,9 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                             
                             asin = original_listing.get("asin_ean_sku", "")
                             # Verwende geändertes MP aus session_state, falls vorhanden
-                            mp_key = f"mp_{listing_id}"
+                            # Erstelle sicheren Key (gleiche Logik wie oben)
+                            safe_listing_id_for_save = re.sub(r'[^a-zA-Z0-9_]', '_', str(listing_id))
+                            mp_key = f"mp_{safe_listing_id_for_save}"
                             mp = st.session_state.get(mp_key, original_listing.get("mp", ""))
                             account = original_listing.get("account") if original_listing.get("account") else None
                             project = original_listing.get("project") if original_listing.get("project") else None
