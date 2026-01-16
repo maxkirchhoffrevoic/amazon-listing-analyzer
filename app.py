@@ -2936,7 +2936,7 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
         # Metadaten für Expander-Header
         asin = db_listing.get('asin_ean_sku', 'N/A')
         # Verwende geändertes MP aus session_state, falls vorhanden
-        # Erstelle sicheren mp_key
+        # Erstelle sicheren mp_key (wird später in render_listing verwendet)
         mp_key = f"mp_{safe_listing_id}"
         mp = st.session_state.get(mp_key, db_listing.get('mp', 'N/A'))
         listing_label = f"{listing_name} - {asin} ({mp})"
@@ -2947,26 +2947,8 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
             with col1:
                 st.info(f"**ASIN/EAN/SKU:** {db_listing.get('asin_ean_sku', 'N/A')}")
             with col2:
-                # Marktplatz-Auswahl
-                current_mp = db_listing.get('mp', '')
-                # Lade verfügbare Marktplätze aus der Datenbank
-                available_mps = get_distinct_values(db_engine, "mp") if db_engine else []
-                # Stelle sicher, dass der aktuelle MP in der Liste ist
-                if current_mp and current_mp not in available_mps:
-                    available_mps = [current_mp] + available_mps
-                # Speichere geändertes MP in session_state
-                # Verwende safe_listing_id für Session State Key
-                if mp_key not in st.session_state:
-                    st.session_state[mp_key] = current_mp
-                selected_mp = st.selectbox(
-                    "**Marktplatz (MP)**",
-                    options=available_mps if available_mps else [current_mp] if current_mp else [],
-                    index=0 if not available_mps else (available_mps.index(current_mp) if current_mp in available_mps else 0),
-                    key=mp_key,
-                    help="Wähle den Marktplatz für dieses Listing (z.B. DE, FR, UK)"
-                )
-                # Hinweis: Der Wert wird automatisch durch die selectbox in session_state gespeichert (key=mp_key)
-                # Daher ist keine explizite Zuweisung nötig
+                # Zeige Marketplace-Info (wird in render_listing bearbeitet)
+                st.info(f"**Marketplace:** {mp}")
             with col3:
                 st.info(f"**Account:** {db_listing.get('account', 'N/A')}")
             with col4:
