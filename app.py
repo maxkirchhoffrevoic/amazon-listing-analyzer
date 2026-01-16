@@ -2917,7 +2917,12 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
         
         # Erstelle einen sicheren Key für Session State (nur alphanumerische Zeichen und Unterstriche)
         # Entferne alle ungültigen Zeichen aus listing_id
-        safe_listing_id = re.sub(r'[^a-zA-Z0-9_]', '_', str(listing_id))
+        # Stelle sicher, dass wir immer einen gültigen Key haben
+        listing_id_str = str(listing_id) if listing_id is not None else str(idx)
+        safe_listing_id = re.sub(r'[^a-zA-Z0-9_]', '_', listing_id_str)
+        # Stelle sicher, dass der Key nicht leer ist und mit einem Buchstaben oder Unterstrich beginnt
+        if not safe_listing_id or safe_listing_id[0].isdigit():
+            safe_listing_id = f"listing_{safe_listing_id}" if safe_listing_id else f"listing_{idx}"
         
         # Generiere einen sinnvollen Namen für das Listing (Fallback-Kette)
         # Verwende str() um sicherzustellen, dass wir immer einen String haben (auch wenn Wert None ist)
@@ -2931,6 +2936,7 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
         # Metadaten für Expander-Header
         asin = db_listing.get('asin_ean_sku', 'N/A')
         # Verwende geändertes MP aus session_state, falls vorhanden
+        # Erstelle sicheren mp_key
         mp_key = f"mp_{safe_listing_id}"
         mp = st.session_state.get(mp_key, db_listing.get('mp', 'N/A'))
         listing_label = f"{listing_name} - {asin} ({mp})"
@@ -2959,8 +2965,8 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                     key=mp_key,
                     help="Wähle den Marktplatz für dieses Listing (z.B. DE, FR, UK)"
                 )
-                # Aktualisiere session_state
-                st.session_state[mp_key] = selected_mp
+                # Hinweis: Der Wert wird automatisch durch die selectbox in session_state gespeichert (key=mp_key)
+                # Daher ist keine explizite Zuweisung nötig
             with col3:
                 st.info(f"**Account:** {db_listing.get('account', 'N/A')}")
             with col4:
