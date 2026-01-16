@@ -2070,7 +2070,7 @@ if db_engine:
                 selected_idx = st.selectbox(
                     "Listing auswählen",
                     options=range(len(db_df)),
-                    format_func=lambda x: f"{db_df.iloc[x].get('name', 'Unbekannt')} - {db_df.iloc[x].get('asin_ean_sku', 'N/A')}",
+                    format_func=lambda x: f"{db_df.iloc[x].get('asin_ean_sku', 'N/A')} ({db_df.iloc[x].get('mp', 'N/A')})",
                     key="selected_listing"
                 )
                 
