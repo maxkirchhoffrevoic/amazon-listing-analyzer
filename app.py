@@ -2912,10 +2912,11 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
         listing_id = db_listing.get("id", str(idx))
         
         # Generiere einen sinnvollen Namen für das Listing (Fallback-Kette)
+        # Verwende str() um sicherzustellen, dass wir immer einen String haben (auch wenn Wert None ist)
         listing_name = (
-            db_listing.get('name', '').strip() or 
-            db_listing.get('product', '').strip() or 
-            (db_listing.get('titel', '')[:50].strip() + '...' if len(db_listing.get('titel', '')) > 50 else db_listing.get('titel', '').strip()) or
+            str(db_listing.get('name', '') or '').strip() or 
+            str(db_listing.get('product', '') or '').strip() or 
+            (str(db_listing.get('titel', '') or '')[:50].strip() + '...' if len(str(db_listing.get('titel', '') or '')) > 50 else str(db_listing.get('titel', '') or '').strip()) or
             f"ASIN: {db_listing.get('asin_ean_sku', 'N/A')}"
         )
         
@@ -3020,10 +3021,11 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
         available_listings = []
         for listing in st.session_state["db_listings_for_edit"]:
             # Generiere Namen mit gleicher Fallback-Logik
+            # Verwende str() um sicherzustellen, dass wir immer einen String haben (auch wenn Wert None ist)
             listing_name = (
-                listing.get('name', '').strip() or 
-                listing.get('product', '').strip() or 
-                (listing.get('titel', '')[:50].strip() + '...' if len(listing.get('titel', '')) > 50 else listing.get('titel', '').strip()) or
+                str(listing.get('name', '') or '').strip() or 
+                str(listing.get('product', '') or '').strip() or 
+                (str(listing.get('titel', '') or '')[:50].strip() + '...' if len(str(listing.get('titel', '') or '')) > 50 else str(listing.get('titel', '') or '').strip()) or
                 f"ASIN: {listing.get('asin_ean_sku', 'N/A')}"
             )
             asin = listing.get('asin_ean_sku', 'N/A')
