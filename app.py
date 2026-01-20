@@ -1538,23 +1538,27 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                     st.error(f"Fehler beim Laden der Guidelines: {e}")
         else:
             # Reset wenn "Neue Guidelines eingeben" ausgewählt wurde
-            if st.session_state.get("last_selected_guideline"):
+            # ABER: Nur wenn sich die Auswahl wirklich geändert hat, nicht bei jedem Rerun
+            current_selection = "-- Neue Guidelines eingeben --"
+            if st.session_state.get("last_selected_guideline") and st.session_state.get("last_selected_guideline") != current_selection:
+                # Nur löschen wenn wirklich von einer Guideline zu "Neue Guidelines" gewechselt wurde
                 st.session_state["last_selected_guideline"] = None
-            # Lösche auch Editing-Flags und alle Eingabewerte wenn neue Guidelines eingegeben werden sollen
-            if "_editing_guideline_id" in st.session_state:
-                del st.session_state["_editing_guideline_id"]
-            if "_editing_guideline_name" in st.session_state:
-                del st.session_state["_editing_guideline_name"]
-            if "input_guideline_name" in st.session_state:
-                del st.session_state["input_guideline_name"]
-            if "input_brand_format" in st.session_state:
-                del st.session_state["input_brand_format"]
-            if "input_required_formulations" in st.session_state:
-                del st.session_state["input_required_formulations"]
-            if "input_forbidden_terms" in st.session_state:
-                del st.session_state["input_forbidden_terms"]
-            if "input_customer_feedback" in st.session_state:
-                del st.session_state["input_customer_feedback"]
+                # Lösche auch Editing-Flags und alle Eingabewerte wenn neue Guidelines eingegeben werden sollen
+                if "_editing_guideline_id" in st.session_state:
+                    del st.session_state["_editing_guideline_id"]
+                if "_editing_guideline_name" in st.session_state:
+                    del st.session_state["_editing_guideline_name"]
+                # WICHTIG: Lösche input_guideline_name NICHT, wenn der Benutzer gerade etwas eingegeben hat
+                # Nur löschen wenn wirklich eine Guideline geladen wurde und jetzt zurückgesetzt wird
+                # Der Wert wird durch das Widget selbst verwaltet
+                if "input_brand_format" in st.session_state:
+                    del st.session_state["input_brand_format"]
+                if "input_required_formulations" in st.session_state:
+                    del st.session_state["input_required_formulations"]
+                if "input_forbidden_terms" in st.session_state:
+                    del st.session_state["input_forbidden_terms"]
+                if "input_customer_feedback" in st.session_state:
+                    del st.session_state["input_customer_feedback"]
     elif debug_mode:
         st.info("ℹ️ Keine gespeicherten Guidelines gefunden. Speichere zuerst eine Brand Guidelines, um sie hier auswählen zu können.")
     
@@ -1592,12 +1596,19 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
     with st.form(key="brand_guidelines_form", clear_on_submit=False):
         col_save1, col_save2 = st.columns([2, 1])
         with col_save1:
+            # Stelle sicher, dass der Wert aus session_state gelesen wird
+            # Wenn nicht vorhanden, verwende leeren String
+            current_guideline_name = st.session_state.get("input_guideline_name", "")
             guideline_name = st.text_input(
                 "Name für diese Brand Guidelines (zum Speichern)",
                 placeholder="z.B. Kunde XYZ - Premium Marke",
                 key="input_guideline_name",
-                value=st.session_state.get("input_guideline_name", "")
+                value=current_guideline_name
             )
+            # Stelle sicher, dass der Wert in session_state gespeichert wird
+            # Dies stellt sicher, dass der Wert auch nach Reruns erhalten bleibt
+            if guideline_name != current_guideline_name:
+                st.session_state["input_guideline_name"] = guideline_name
             # Zeige Info wenn eine Guideline bearbeitet wird
             if "_editing_guideline_id" in st.session_state:
                 st.info(f"✏️ Bearbeite bestehende Guideline (ID: {st.session_state['_editing_guideline_id']}). Beim Speichern wird diese überschrieben.")
