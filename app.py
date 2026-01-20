@@ -1605,9 +1605,37 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
             # Lese den Wert direkt aus dem Widget (guideline_name), da dieser immer aktuell ist
             # Der Wert wird auch automatisch in session_state gespeichert, aber beim Button-Click
             # ist der Widget-Wert die zuverlässigste Quelle
+            
+            # Debug: Zeige alle relevanten Werte
+            debug_info = {
+                "guideline_name (Widget)": repr(guideline_name),
+                "guideline_name (Typ)": type(guideline_name).__name__,
+                "guideline_name (Länge)": len(str(guideline_name)) if guideline_name else 0,
+                "session_state['input_guideline_name']": repr(st.session_state.get("input_guideline_name", "NICHT_GESETZT")),
+                "Nach str()": repr(str(guideline_name) if guideline_name else ""),
+                "Nach strip()": repr(str(guideline_name).strip() if guideline_name else ""),
+            }
+            
             guideline_name_value = str(guideline_name).strip() if guideline_name else ""
             
             # Prüfe ob Name wirklich ausgefüllt ist
+            if not guideline_name_value:
+                # Zeige Debug-Informationen wenn Validierung fehlschlägt
+                with st.expander("🔍 Debug-Informationen (Warum kann nicht gespeichert werden?)", expanded=True):
+                    st.write("**Werte-Analyse:**")
+                    for key, value in debug_info.items():
+                        st.code(f"{key}: {value}")
+                    
+                    st.write("**Zusammenfassung:**")
+                    if not guideline_name:
+                        st.error("❌ `guideline_name` ist leer oder None")
+                    elif not str(guideline_name).strip():
+                        st.error("❌ `guideline_name` enthält nur Leerzeichen")
+                        st.info(f"Original-Wert (repr): {repr(guideline_name)}")
+                    else:
+                        st.error(f"❌ Unerwarteter Fehler: `guideline_name_value` ist leer trotz vorhandenem Wert")
+                        st.info(f"guideline_name_value: {repr(guideline_name_value)}")
+            
             if guideline_name_value:
                 if db_engine:
                     try:
