@@ -1602,9 +1602,13 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
     with col_save2:
         st.write("")  # Spacing
         if st.button("💾 Brand Guidelines speichern", key="btn_save_guidelines"):
-            # Prüfe ob Name wirklich ausgefüllt ist (nach Trimmen)
-            guideline_name_trimmed = str(guideline_name).strip() if guideline_name else ""
-            if guideline_name_trimmed:
+            # Lese den Wert direkt aus dem Widget (guideline_name), da dieser immer aktuell ist
+            # Der Wert wird auch automatisch in session_state gespeichert, aber beim Button-Click
+            # ist der Widget-Wert die zuverlässigste Quelle
+            guideline_name_value = str(guideline_name).strip() if guideline_name else ""
+            
+            # Prüfe ob Name wirklich ausgefüllt ist
+            if guideline_name_value:
                 if db_engine:
                     try:
                         with db_engine.begin() as conn:
@@ -1615,10 +1619,10 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                 # Update der bestehenden Guideline (basierend auf ID, nicht Name)
                                 # Prüfe ob der Name geändert wurde und ob der neue Name bereits existiert
                                 check_name_sql = text("SELECT id FROM public.brand_guidelines WHERE name = :name AND id != :id")
-                                name_exists = conn.execute(check_name_sql, {"name": guideline_name_trimmed, "id": editing_id}).fetchone()
+                                name_exists = conn.execute(check_name_sql, {"name": guideline_name_value, "id": editing_id}).fetchone()
                                 
                                 if name_exists:
-                                    st.error(f"❌ Der Name '{guideline_name_trimmed}' wird bereits von einer anderen Guideline verwendet. Bitte wähle einen anderen Namen.")
+                                    st.error(f"❌ Der Name '{guideline_name_value}' wird bereits von einer anderen Guideline verwendet. Bitte wähle einen anderen Namen.")
                                 else:
                                     # Update mit neuem Namen und Inhalten
                                     update_sql = text("""
@@ -1633,13 +1637,13 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                     """)
                                     conn.execute(update_sql, {
                                         "id": editing_id,
-                                        "name": guideline_name_trimmed,
+                                        "name": guideline_name_value,
                                         "brand_name_format": st.session_state.get("input_brand_format", ""),
                                         "required_formulations": st.session_state.get("input_required_formulations", ""),
                                         "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
                                         "customer_feedback": st.session_state.get("input_customer_feedback", "")
                                     })
-                                    st.success(f"✅ Brand Guidelines '{guideline_name_trimmed}' aktualisiert!")
+                                    st.success(f"✅ Brand Guidelines '{guideline_name_value}' aktualisiert!")
                                     # Lösche die Editing-Flags
                                     del st.session_state["_editing_guideline_id"]
                                     if "_editing_guideline_name" in st.session_state:
@@ -1648,7 +1652,7 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                             else:
                                 # Prüfe ob Name bereits existiert (für neue Guidelines)
                                 check_sql = text("SELECT id FROM public.brand_guidelines WHERE name = :name")
-                                existing = conn.execute(check_sql, {"name": guideline_name_trimmed}).fetchone()
+                                existing = conn.execute(check_sql, {"name": guideline_name_value}).fetchone()
                                 
                                 if existing:
                                     # Update basierend auf Name (Fallback für alte Funktionalität)
@@ -1668,7 +1672,7 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                         "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
                                         "customer_feedback": st.session_state.get("input_customer_feedback", "")
                                     })
-                                    st.success(f"✅ Brand Guidelines '{guideline_name_trimmed}' aktualisiert!")
+                                    st.success(f"✅ Brand Guidelines '{guideline_name_value}' aktualisiert!")
                                     st.rerun()
                                 else:
                                     # Insert
@@ -1677,7 +1681,7 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                         VALUES (:name, :brand_name_format, :required_formulations, :forbidden_terms, :customer_feedback)
                                     """)
                                     conn.execute(insert_sql, {
-                                        "name": guideline_name_trimmed,
+                                        "name": guideline_name_value,
                                         "brand_name_format": st.session_state.get("input_brand_format", ""),
                                         "required_formulations": st.session_state.get("input_required_formulations", ""),
                                         "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
@@ -1686,11 +1690,11 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                     # EXPLIZITER COMMIT - wichtig für Supabase Pooler
                                     conn.commit()
                                     
-                                    st.success(f"✅ Brand Guidelines '{guideline_name_trimmed}' gespeichert!")
+                                    st.success(f"✅ Brand Guidelines '{guideline_name_value}' gespeichert!")
                                     if debug_mode:
                                         # Prüfe direkt in der gleichen Transaction (nach Commit)
                                         try:
-                                            check_saved_same = conn.execute(text("SELECT id, name, brand_name_format FROM public.brand_guidelines WHERE name = :name"), {"name": guideline_name_trimmed})
+                                            check_saved_same = conn.execute(text("SELECT id, name, brand_name_format FROM public.brand_guidelines WHERE name = :name"), {"name": guideline_name_value})
                                             saved_row_same = check_saved_same.fetchone()
                                             if saved_row_same:
                                                 st.write(f"✅ **In derselben Connection (nach Commit):** ID {saved_row_same[0]}, Name: '{saved_row_same[1]}'")
@@ -1719,7 +1723,7 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                                 # Setze Transaction-Isolation auf READ COMMITTED (Standard)
                                                 verify_conn.execute(text("SET TRANSACTION ISOLATION LEVEL READ COMMITTED"))
                                                 
-                                                check_saved = verify_conn.execute(text("SELECT id, name, brand_name_format FROM public.brand_guidelines WHERE name = :name"), {"name": guideline_name_trimmed})
+                                                check_saved = verify_conn.execute(text("SELECT id, name, brand_name_format FROM public.brand_guidelines WHERE name = :name"), {"name": guideline_name_value})
                                                 saved_row = check_saved.fetchone()
                                                 if saved_row:
                                                     st.write(f"✅ **Nach Commit (neue Connection):** ID {saved_row[0]}, Name: '{saved_row[1]}'")
