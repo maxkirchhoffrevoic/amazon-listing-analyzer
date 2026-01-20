@@ -1602,21 +1602,23 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
     with col_save2:
         st.write("")  # Spacing
         if st.button("💾 Brand Guidelines speichern", key="btn_save_guidelines"):
-            # Lese den Wert direkt aus dem Widget (guideline_name), da dieser immer aktuell ist
-            # Der Wert wird auch automatisch in session_state gespeichert, aber beim Button-Click
-            # ist der Widget-Wert die zuverlässigste Quelle
+            # WICHTIG: Streamlit Widget-Werte werden erst nach einem Rerun aktualisiert
+            # Daher müssen wir den Wert direkt aus session_state lesen, da das Widget einen key hat
+            # Das Widget mit key="input_guideline_name" speichert den Wert automatisch in session_state
+            guideline_name_from_state = st.session_state.get("input_guideline_name", "")
             
             # Debug: Zeige alle relevanten Werte
             debug_info = {
-                "guideline_name (Widget)": repr(guideline_name),
+                "guideline_name (Widget-Variable)": repr(guideline_name),
                 "guideline_name (Typ)": type(guideline_name).__name__,
-                "guideline_name (Länge)": len(str(guideline_name)) if guideline_name else 0,
-                "session_state['input_guideline_name']": repr(st.session_state.get("input_guideline_name", "NICHT_GESETZT")),
-                "Nach str()": repr(str(guideline_name) if guideline_name else ""),
-                "Nach strip()": repr(str(guideline_name).strip() if guideline_name else ""),
+                "session_state['input_guideline_name']": repr(guideline_name_from_state),
+                "session_state['input_guideline_name'] (Typ)": type(guideline_name_from_state).__name__,
+                "session_state['input_guideline_name'] (Länge)": len(str(guideline_name_from_state)) if guideline_name_from_state else 0,
+                "Nach str() und strip()": repr(str(guideline_name_from_state).strip() if guideline_name_from_state else ""),
             }
             
-            guideline_name_value = str(guideline_name).strip() if guideline_name else ""
+            # Verwende den Wert aus session_state, da dieser immer aktuell ist
+            guideline_name_value = str(guideline_name_from_state).strip() if guideline_name_from_state else ""
             
             # Prüfe ob Name wirklich ausgefüllt ist
             if not guideline_name_value:
@@ -1627,11 +1629,13 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                         st.code(f"{key}: {value}")
                     
                     st.write("**Zusammenfassung:**")
-                    if not guideline_name:
-                        st.error("❌ `guideline_name` ist leer oder None")
-                    elif not str(guideline_name).strip():
-                        st.error("❌ `guideline_name` enthält nur Leerzeichen")
-                        st.info(f"Original-Wert (repr): {repr(guideline_name)}")
+                    if not guideline_name_from_state:
+                        st.error("❌ `session_state['input_guideline_name']` ist leer oder nicht gesetzt")
+                        st.info("💡 **Hinweis:** Bitte gib einen Namen im Feld 'Name für diese Brand Guidelines (zum Speichern)' ein.")
+                    elif not str(guideline_name_from_state).strip():
+                        st.error("❌ `session_state['input_guideline_name']` enthält nur Leerzeichen")
+                        st.info(f"Original-Wert (repr): {repr(guideline_name_from_state)}")
+                        st.info("💡 **Hinweis:** Bitte entferne Leerzeichen am Anfang/Ende des Namens.")
                     else:
                         st.error(f"❌ Unerwarteter Fehler: `guideline_name_value` ist leer trotz vorhandenem Wert")
                         st.info(f"guideline_name_value: {repr(guideline_name_value)}")
