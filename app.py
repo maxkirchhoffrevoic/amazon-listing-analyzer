@@ -149,9 +149,21 @@ def init_database(engine):
         description TEXT,
         search_terms TEXT,
         keywords TEXT,
+        comments TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    
+    -- Füge comments Spalte hinzu falls sie nicht existiert (für bestehende Datenbanken)
+    DO $$ 
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'listings' AND column_name = 'comments'
+        ) THEN
+            ALTER TABLE listings ADD COLUMN comments TEXT;
+        END IF;
+    END $$;
     
     CREATE TABLE IF NOT EXISTS public.brand_guidelines (
         id SERIAL PRIMARY KEY,
@@ -194,6 +206,10 @@ def save_listing_to_db(engine, listing_data, asin_ean_sku=None, mp=None, account
             
         if result:
             # Update bestehender Eintrag
+            # Kommentare: Wenn leer, setze auf NULL (lösche sie)
+            comments_value = listing_data.get("comments", "").strip() if listing_data.get("comments") else ""
+            comments_db = comments_value if comments_value else None
+            
             update_sql = text("""
                 UPDATE listings SET
                     image = :image,
@@ -211,6 +227,7 @@ def save_listing_to_db(engine, listing_data, asin_ean_sku=None, mp=None, account
                     description = :description,
                     search_terms = :search_terms,
                     keywords = :keywords,
+                    comments = :comments,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id
             """)
@@ -231,20 +248,25 @@ def save_listing_to_db(engine, listing_data, asin_ean_sku=None, mp=None, account
                     "bullet5": listing_data.get("Bullet5", ""),
                     "description": listing_data.get("Description", ""),
                     "search_terms": listing_data.get("SearchTerms", ""),
-                    "keywords": listing_data.get("Keywords", "")
+                    "keywords": listing_data.get("Keywords", ""),
+                    "comments": comments_db
                 })
             return True
     
     # Neuer Eintrag
+    # Kommentare: Wenn leer, setze auf NULL
+    comments_value = listing_data.get("comments", "").strip() if listing_data.get("comments") else ""
+    comments_db = comments_value if comments_value else None
+    
     insert_sql = text("""
         INSERT INTO listings (
             asin_ean_sku, mp, image, name, title, account, project,
             product, titel, bullet1, bullet2, bullet3, bullet4, bullet5,
-            description, search_terms, keywords
+            description, search_terms, keywords, comments
         ) VALUES (
             :asin_ean_sku, :mp, :image, :name, :title, :account, :project,
             :product, :titel, :bullet1, :bullet2, :bullet3, :bullet4, :bullet5,
-            :description, :search_terms, :keywords
+            :description, :search_terms, :keywords, :comments
         )
     """)
     
@@ -267,7 +289,8 @@ def save_listing_to_db(engine, listing_data, asin_ean_sku=None, mp=None, account
                 "bullet5": listing_data.get("Bullet5", ""),
                 "description": listing_data.get("Description", ""),
                 "search_terms": listing_data.get("SearchTerms", ""),
-                "keywords": listing_data.get("Keywords", "")
+                "keywords": listing_data.get("Keywords", ""),
+                "comments": comments_db
             })
         return True
     except SQLAlchemyError as e:
@@ -381,6 +404,10 @@ def batch_save_listings_to_db(engine, listings_data, batch_size=100):
                     else:
                         listing_id = None
                     
+                    # Kommentare: Wenn leer, setze auf NULL
+                    comments_value = listing_data.get("comments", "").strip() if listing_data.get("comments") else ""
+                    comments_db = comments_value if comments_value else None
+                    
                     if listing_id:
                         # Update
                         update_sql = text("""
@@ -390,7 +417,7 @@ def batch_save_listings_to_db(engine, listings_data, batch_size=100):
                                 titel = :titel, bullet1 = :bullet1, bullet2 = :bullet2,
                                 bullet3 = :bullet3, bullet4 = :bullet4, bullet5 = :bullet5,
                                 description = :description, search_terms = :search_terms,
-                                keywords = :keywords, updated_at = CURRENT_TIMESTAMP
+                                keywords = :keywords, comments = :comments, updated_at = CURRENT_TIMESTAMP
                             WHERE id = :id
                         """)
                         conn.execute(update_sql, {
@@ -408,7 +435,8 @@ def batch_save_listings_to_db(engine, listings_data, batch_size=100):
                             "bullet5": listing_data.get("Bullet5", ""),
                             "description": listing_data.get("Description", ""),
                             "search_terms": listing_data.get("SearchTerms", ""),
-                            "keywords": listing_data.get("Keywords", "")
+                            "keywords": listing_data.get("Keywords", ""),
+                            "comments": comments_db
                         })
                         success_count += 1
                     else:
@@ -417,11 +445,11 @@ def batch_save_listings_to_db(engine, listings_data, batch_size=100):
                             INSERT INTO listings (
                                 asin_ean_sku, mp, image, name, title, account, project,
                                 product, titel, bullet1, bullet2, bullet3, bullet4, bullet5,
-                                description, search_terms, keywords
+                                description, search_terms, keywords, comments
                             ) VALUES (
                                 :asin_ean_sku, :mp, :image, :name, :title, :account, :project,
                                 :product, :titel, :bullet1, :bullet2, :bullet3, :bullet4, :bullet5,
-                                :description, :search_terms, :keywords
+                                :description, :search_terms, :keywords, :comments
                             )
                         """)
                         conn.execute(insert_sql, {
@@ -439,7 +467,8 @@ def batch_save_listings_to_db(engine, listings_data, batch_size=100):
                             "bullet5": listing_data.get("Bullet5", ""),
                             "description": listing_data.get("Description", ""),
                             "search_terms": listing_data.get("SearchTerms", ""),
-                            "keywords": listing_data.get("Keywords", "")
+                            "keywords": listing_data.get("Keywords", ""),
+                            "comments": comments_db
                         })
                         success_count += 1
                 
@@ -658,6 +687,18 @@ def process_ai_generation_excel(uploaded_file, db_engine=None):
                 product_name = str(row.get("Produktname", "")).strip()
                 marketplace = str(row.get("Marketplace", "")).strip()
                 
+                # Versuche ASIN aus verschiedenen möglichen Spaltennamen zu lesen
+                asin_value = ""
+                for asin_col in ["ASIN", "ASIN/EAN/SKU", "ASIN / EAN / SKU", "asin_ean_sku", "EAN", "SKU"]:
+                    if asin_col in df.columns:
+                        asin_value = str(row.get(asin_col, "")).strip()
+                        if asin_value:
+                            break
+                
+                # Falls keine ASIN gefunden, verwende Produktname als Fallback
+                if not asin_value:
+                    asin_value = product_name
+                
                 if not product_name:
                     errors.append(f"Zeile {idx + 2}: Produktname fehlt")
                     continue
@@ -715,8 +756,29 @@ def process_ai_generation_excel(uploaded_file, db_engine=None):
                         "SearchTerms": result.get("SearchTerms", ""),
                         "Keywords": input_data["keywords"],
                         "mp": marketplace,  # Verwende "mp" statt "Marketplace" für Kompatibilität mit render_listing
+                        "asin_ean_sku": asin_value  # ASIN hinzufügen
                     }
                     generated_listings.append(listing_data)
+                    
+                    # Automatisch in Datenbank speichern, damit es bei Browserabsturz nicht verloren geht
+                    if db_engine and asin_value and marketplace:
+                        try:
+                            listing_data_for_db = {
+                                "Product": product_name,
+                                "Titel": result.get("Titel", ""),
+                                "Bullet1": result.get("Bullet1", ""),
+                                "Bullet2": result.get("Bullet2", ""),
+                                "Bullet3": result.get("Bullet3", ""),
+                                "Bullet4": result.get("Bullet4", ""),
+                                "Bullet5": result.get("Bullet5", ""),
+                                "Description": result.get("Description", ""),
+                                "SearchTerms": result.get("SearchTerms", ""),
+                                "Keywords": input_data["keywords"]
+                            }
+                            save_listing_to_db(db_engine, listing_data_for_db, asin_value, marketplace, None, None)
+                        except Exception as save_error:
+                            # Fehler beim Speichern nicht kritisch, nur in errors-Liste aufnehmen
+                            errors.append(f"Zeile {idx + 2}: Automatisches Speichern fehlgeschlagen: {str(save_error)}")
                 else:
                     errors.append(f"Zeile {idx + 2}: KI-Generierung fehlgeschlagen")
                     
@@ -1278,6 +1340,36 @@ Damit die Datei korrekt eingelesen wird, muss sie folgende Struktur erfüllen:
 
 # ========= NEU: Kontext & Inputs + Prompt-Button =========
 st.markdown("### ✍️ Kontext & Inputs für automatische Erstellung")
+
+# Metadaten-Felder (Pflichtfelder)
+st.markdown("#### 📋 Metadaten (Pflichtfelder)")
+meta_col1, meta_col2 = st.columns(2)
+with meta_col1:
+    asin_input = st.text_input(
+        "ASIN/EAN/SKU *",
+        placeholder="z.B. B08XYZ1234 oder interner Name",
+        key="input_asin_metadata",
+        help="Bei fehlender ASIN kann hier auch ein interner Name hinterlegt werden"
+    )
+with meta_col2:
+    # Lade verfügbare Marktplätze aus der Datenbank
+    available_mps_meta = get_distinct_values(db_engine, "mp") if db_engine else []
+    if not available_mps_meta:
+        available_mps_meta = ["DE", "FR", "UK", "IT", "ES", "US", "CA"]
+    # Stelle sicher, dass "DE" in der Liste ist
+    if "DE" not in available_mps_meta:
+        available_mps_meta = ["DE"] + available_mps_meta
+    
+    # Setze Standard-Wert auf "DE" wenn nicht gesetzt
+    if "input_mp_metadata" not in st.session_state:
+        st.session_state["input_mp_metadata"] = "DE"
+    
+    mp_input = st.selectbox(
+        "Marketplace (MP) *",
+        options=available_mps_meta,
+        index=available_mps_meta.index(st.session_state.get("input_mp_metadata", "DE")) if st.session_state.get("input_mp_metadata", "DE") in available_mps_meta else 0,
+        key="input_mp_metadata"
+    )
 
 st.info("💡 **Hinweis:** Mindestens eines der Felder 'Produktname', 'Produktspezifikationen' oder 'USPs' sollte ausgefüllt sein. Alle anderen Felder sind optional, helfen aber der KI dabei, bessere und genauere Listings zu erstellen.")
 
@@ -1921,47 +2013,81 @@ def _call_openai_and_parse(prompt_text: str) -> dict:
         return {}
 
 if st.button("✨ Listing automatisch erstellen (ChatGPT – gpt-5)"):
-    # Sammle alle Eingabefelder
-    input_data = {
-        "product_name": st.session_state.get("input_product_name", ""),
-        "product_specs": st.session_state.get("input_product_specs", ""),
-        "usps": st.session_state.get("input_usps", ""),
-        "target_audience": st.session_state.get("input_target_audience", ""),
-        "customer_feedback": st.session_state.get("input_customer_feedback", ""),
-        "seasonal_info": st.session_state.get("input_seasonal", ""),
-        "brand_name_format": st.session_state.get("input_brand_format", ""),
-        "required_formulations": st.session_state.get("input_required_formulations", ""),
-        "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
-        "keywords": st.session_state.get("input_keywords", ""),
-    }
+    # Sammle Metadaten (Pflichtfelder)
+    asin_metadata = st.session_state.get("input_asin_metadata", "").strip()
+    mp_metadata = st.session_state.get("input_mp_metadata", "").strip()
     
-    # Prüfe ob mindestens Grundinformationen vorhanden sind
-    has_basic_info = input_data["product_name"].strip() or input_data["product_specs"].strip() or input_data["usps"].strip()
-    
-    if not has_basic_info:
-        st.warning("⚠️ Bitte fülle mindestens die Felder 'Produktname', 'Produktspezifikationen' oder 'USPs' aus.")
+    # Prüfe Pflichtfelder
+    if not asin_metadata:
+        st.error("❌ Bitte gib eine ASIN/EAN/SKU oder einen internen Namen ein.")
+    elif not mp_metadata:
+        st.error("❌ Bitte wähle einen Marketplace (MP) aus.")
     else:
-        with st.spinner("🤖 Generiere Listing mit KI..."):
-            prompt = _build_prompt(input_data)
-            result = _call_openai_and_parse(prompt)
-        if result:
-            # Generiertes Listing in identisches Datenformat bringen
-            product_name_for_listing = input_data["product_name"].strip() or "Generiert aus Kontext"
-            keywords_for_listing = input_data["keywords"].strip() or ""
-            
-            st.session_state["generated_rows"].append({
-                "Product": product_name_for_listing,
-                "Titel": result.get("Titel", ""),
-                "Bullet1": result.get("Bullet1", ""),
-                "Bullet2": result.get("Bullet2", ""),
-                "Bullet3": result.get("Bullet3", ""),
-                "Bullet4": result.get("Bullet4", ""),
-                "Bullet5": result.get("Bullet5", ""),
-                "Description": result.get("Description", ""),
-                "SearchTerms": result.get("SearchTerms", ""),
-                "Keywords": keywords_for_listing
-            })
-            st.success("Inhalte generiert. Scrolle nach unten – das Listing erscheint in der Bearbeitungsmaske.")
+        # Sammle alle Eingabefelder
+        input_data = {
+            "product_name": st.session_state.get("input_product_name", ""),
+            "product_specs": st.session_state.get("input_product_specs", ""),
+            "usps": st.session_state.get("input_usps", ""),
+            "target_audience": st.session_state.get("input_target_audience", ""),
+            "customer_feedback": st.session_state.get("input_customer_feedback", ""),
+            "seasonal_info": st.session_state.get("input_seasonal", ""),
+            "brand_name_format": st.session_state.get("input_brand_format", ""),
+            "required_formulations": st.session_state.get("input_required_formulations", ""),
+            "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
+            "keywords": st.session_state.get("input_keywords", ""),
+        }
+        
+        # Prüfe ob mindestens Grundinformationen vorhanden sind
+        has_basic_info = input_data["product_name"].strip() or input_data["product_specs"].strip() or input_data["usps"].strip()
+        
+        if not has_basic_info:
+            st.warning("⚠️ Bitte fülle mindestens die Felder 'Produktname', 'Produktspezifikationen' oder 'USPs' aus.")
+        else:
+            with st.spinner("🤖 Generiere Listing mit KI..."):
+                prompt = _build_prompt(input_data)
+                result = _call_openai_and_parse(prompt)
+            if result:
+                # Generiertes Listing in identisches Datenformat bringen
+                product_name_for_listing = input_data["product_name"].strip() or "Generiert aus Kontext"
+                keywords_for_listing = input_data["keywords"].strip() or ""
+                
+                generated_listing = {
+                    "Product": product_name_for_listing,
+                    "Titel": result.get("Titel", ""),
+                    "Bullet1": result.get("Bullet1", ""),
+                    "Bullet2": result.get("Bullet2", ""),
+                    "Bullet3": result.get("Bullet3", ""),
+                    "Bullet4": result.get("Bullet4", ""),
+                    "Bullet5": result.get("Bullet5", ""),
+                    "Description": result.get("Description", ""),
+                    "SearchTerms": result.get("SearchTerms", ""),
+                    "Keywords": keywords_for_listing,
+                    "asin_ean_sku": asin_metadata,  # Metadaten hinzufügen
+                    "mp": mp_metadata  # Metadaten hinzufügen
+                }
+                st.session_state["generated_rows"].append(generated_listing)
+                
+                # Automatisch in Datenbank speichern, damit es bei Browserabsturz nicht verloren geht
+                if db_engine and asin_metadata and mp_metadata:
+                    try:
+                        listing_data_for_db = {
+                            "Product": product_name_for_listing,
+                            "Titel": result.get("Titel", ""),
+                            "Bullet1": result.get("Bullet1", ""),
+                            "Bullet2": result.get("Bullet2", ""),
+                            "Bullet3": result.get("Bullet3", ""),
+                            "Bullet4": result.get("Bullet4", ""),
+                            "Bullet5": result.get("Bullet5", ""),
+                            "Description": result.get("Description", ""),
+                            "SearchTerms": result.get("SearchTerms", ""),
+                            "Keywords": keywords_for_listing
+                        }
+                        if save_listing_to_db(db_engine, listing_data_for_db, asin_metadata, mp_metadata, None, None):
+                            st.info("💾 Listing automatisch in Datenbank gespeichert (kann später überschrieben werden).")
+                    except Exception as e:
+                        st.warning(f"⚠️ Automatisches Speichern fehlgeschlagen: {e}")
+                
+                st.success("Inhalte generiert. Scrolle nach unten – das Listing erscheint in der Bearbeitungsmaske.")
 
 # ========= NEU: Excel-basierte KI-Generierung =========
 st.markdown("---")
@@ -2563,10 +2689,18 @@ def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
             # Wenn keine Marktplätze verfügbar, füge Standard-Marktplätze hinzu
             if not available_mps:
                 available_mps = ["DE", "FR", "UK", "IT", "ES", "US", "CA"]
+            # Stelle sicher, dass "DE" in der Liste ist (für Standard-Wert)
+            if "DE" not in available_mps:
+                available_mps = ["DE"] + available_mps
             # Stelle sicher, dass mindestens ein Wert ausgewählt ist
+            # Wenn kein Marketplace hinterlegt ist, verwende "DE" als Standard
             if mp_key not in st.session_state:
-                st.session_state[mp_key] = default_mp if default_mp else (available_mps[0] if available_mps else "")
+                st.session_state[mp_key] = default_mp if default_mp else "DE"
             current_mp = st.session_state[mp_key]
+            # Wenn current_mp leer oder nicht in der Liste ist, setze auf "DE"
+            if not current_mp or current_mp not in available_mps:
+                current_mp = "DE"
+                st.session_state[mp_key] = "DE"
             # Finde Index des aktuellen MP
             try:
                 mp_index = available_mps.index(current_mp) if current_mp in available_mps else 0
@@ -2611,6 +2745,48 @@ def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
             keywords_raw = str(row.get("Keywords", ""))
             keywords_input = st.text_area("Keywords (Komma oder Zeilenumbruch)", value=keywords_raw, key=f"kw_input_{key_suffix}")
             keywords = [kw.strip() for kw in re.split(r"[,\n]", keywords_input) if kw.strip()]
+            
+            # Kommentare-Bereich
+            st.markdown("---")
+            st.markdown("### 💬 Kommentare")
+            comments_key = f"comments_{key_suffix}"
+            default_comments = str(row.get("comments", "")).strip() if row.get("comments") else ""
+            
+            # Initialisiere Kommentar-State
+            if comments_key not in st.session_state:
+                st.session_state[comments_key] = default_comments
+            
+            # Prüfe ob Kommentare vorhanden sind
+            has_comments = bool(st.session_state[comments_key] and st.session_state[comments_key].strip())
+            
+            # Button zum Hinzufügen/Entfernen von Kommentaren
+            if has_comments:
+                if st.button("🗑️ Kommentare entfernen", key=f"btn_remove_comments_{key_suffix}", use_container_width=True):
+                    st.session_state[comments_key] = ""
+                    st.rerun()
+                # Kommentar-Feld anzeigen
+                comments_value = st.text_area(
+                    "Kommentare",
+                    value=st.session_state[comments_key],
+                    key=comments_key,
+                    height=150,
+                    help="Kommentare zu diesem Listing",
+                    on_change=_keep_open_expander
+                )
+            else:
+                if st.button("➕ Kommentare hinzufügen", key=f"btn_add_comments_{key_suffix}", use_container_width=True):
+                    st.session_state[comments_key] = ""
+                    st.rerun()
+                # Verstecktes Feld für leere Kommentare (damit der Wert gespeichert wird)
+                st.text_area(
+                    "Kommentare",
+                    value="",
+                    key=comments_key,
+                    height=150,
+                    help="Kommentare zu diesem Listing",
+                    label_visibility="collapsed",
+                    disabled=True
+                )
 
         with col2:
             def render_field(field_name, limit):
@@ -2647,6 +2823,9 @@ def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
             listing_data["mp"] = st.session_state.get(f"mp_{key_suffix}", "")
             listing_data["account"] = st.session_state.get(f"account_{key_suffix}", "")
             listing_data["project"] = st.session_state.get(f"project_{key_suffix}", "")
+            # Kommentare hinzufügen
+            comments_value = st.session_state.get(comments_key, "").strip() if st.session_state.get(comments_key) else ""
+            listing_data["comments"] = comments_value if comments_value else None
 
         # Live-Keyword-Chips (links), basierend auf aktuellem Content
         all_text = " ".join(
@@ -2985,7 +3164,9 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
         # Verwende geändertes MP aus session_state, falls vorhanden
         # Erstelle sicheren mp_key (wird später in render_listing verwendet)
         mp_key = f"mp_{safe_listing_id}"
-        mp = st.session_state.get(mp_key, db_listing.get('mp', 'N/A'))
+        # Wenn kein MP hinterlegt ist, verwende "DE" als Standard
+        db_mp = db_listing.get('mp', '') or ''
+        mp = st.session_state.get(mp_key, db_mp if db_mp else 'DE')
         listing_label = f"{listing_name} - {asin} ({mp})"
         
         with st.expander(f"📦 {listing_label}", expanded=True):
@@ -3029,7 +3210,9 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                 "Description": db_listing.get("Description", ""),
                 "SearchTerms": db_listing.get("SearchTerms", ""),
                 "Keywords": db_listing.get("Keywords", ""),
-                "asin_ean_sku": db_listing.get("asin_ean_sku", "")  # Für Fallback in render_listing
+                "asin_ean_sku": db_listing.get("asin_ean_sku", ""),  # Für Fallback in render_listing
+                "mp": mp,  # MP-Wert für render_listing (bereits mit "DE" als Standard gesetzt)
+                "comments": db_listing.get("comments", "") or ""  # Kommentare hinzufügen
             }
             
             # Render Listing mit eindeutigem Index basierend auf ID
@@ -3274,6 +3457,14 @@ if updated_rows_all:
             st.markdown("**Hinweis:** Die Metadaten (ASIN, MP, Account, Project) werden aus den einzelnen Bearbeitungsmasken verwendet.")
             st.info("💡 Jedes Listing benötigt ASIN/EAN/SKU und Marketplace (MP). Diese können in jeder Bearbeitungsmaske individuell gesetzt werden.")
             
+            # Option zum Überschreiben bestehender Einträge
+            overwrite_existing = st.checkbox(
+                "Bestehende Einträge überschreiben",
+                value=True,
+                help="Wenn aktiviert, werden bestehende Listings (gleiche ASIN + MP) aktualisiert. Sonst werden sie übersprungen.",
+                key="overwrite_excel_listings"
+            )
+            
             if st.button("💾 Alle Listings in Datenbank speichern", key="btn_save_all"):
                 # Metadaten werden aus den einzelnen listing_data Objekten gelesen
                 # Erkenne und nummeriere ASIN-Duplikate
@@ -3300,6 +3491,7 @@ if updated_rows_all:
                 
                 success_count = 0
                 error_count = 0
+                skipped_count = 0
                 
                 for listing_data in updated_rows_all:
                     asin = str(listing_data.get("asin_ean_sku", "")).strip()
@@ -3311,13 +3503,48 @@ if updated_rows_all:
                     project = str(listing_data.get("project", "")).strip() or None
                     
                     if asin and mp:
-                        # Wenn diese ASIN mehrfach vorkommt, nummeriere sie
-                        if asin_counter.get(asin, 0) > 1:
+                        # Prüfe ob Eintrag bereits in Datenbank existiert
+                        check_sql = text("SELECT id FROM listings WHERE asin_ean_sku = :asin AND mp = :mp")
+                        existing_in_db = None
+                        try:
+                            with db_engine.connect() as conn:
+                                result = conn.execute(check_sql, {"asin": asin, "mp": mp}).fetchone()
+                                if result:
+                                    existing_in_db = result[0]
+                        except Exception:
+                            pass
+                        
+                        # Wenn Eintrag existiert und überschreiben nicht aktiviert ist, überspringe
+                        if existing_in_db and not overwrite_existing:
+                            skipped_count += 1
+                            continue
+                        
+                        # Bestimme finale ASIN (nummeriert nur für Duplikate innerhalb des Uploads, nicht für DB-Einträge)
+                        final_asin = asin
+                        if existing_in_db and overwrite_existing:
+                            # Wenn überschreiben aktiviert ist, verwende die ursprüngliche ASIN (nicht nummeriert)
+                            final_asin = asin
+                        elif asin_counter.get(asin, 0) > 1:
+                            # Nur für Duplikate innerhalb des aktuellen Uploads nummerieren
                             asin_occurrence[asin] = asin_occurrence.get(asin, 0) + 1
-                            # Füge Nummer hinzu: Original-ASIN + "-" + Nummer
+                            # Prüfe ob die nummerierte ASIN bereits in DB existiert
                             numbered_asin = f"{asin}-{asin_occurrence[asin]}"
-                        else:
-                            numbered_asin = asin
+                            check_numbered_sql = text("SELECT id FROM listings WHERE asin_ean_sku = :asin AND mp = :mp")
+                            existing_numbered = None
+                            try:
+                                with db_engine.connect() as conn:
+                                    result = conn.execute(check_numbered_sql, {"asin": numbered_asin, "mp": mp}).fetchone()
+                                    if result:
+                                        existing_numbered = result[0]
+                            except Exception:
+                                pass
+                            
+                            # Wenn nummerierte ASIN existiert und überschreiben nicht aktiviert, überspringe
+                            if existing_numbered and not overwrite_existing:
+                                skipped_count += 1
+                                continue
+                            
+                            final_asin = numbered_asin
                         
                         # Erstelle listing_data für save_listing_to_db (ohne Metadaten)
                         listing_data_for_db = {
@@ -3333,7 +3560,7 @@ if updated_rows_all:
                             "Keywords": str(listing_data.get("Keywords", ""))
                         }
                         
-                        if save_listing_to_db(db_engine, listing_data_for_db, numbered_asin, mp, account, project):
+                        if save_listing_to_db(db_engine, listing_data_for_db, final_asin, mp, account, project):
                             success_count += 1
                         else:
                             error_count += 1
@@ -3342,6 +3569,8 @@ if updated_rows_all:
                 
                 if success_count > 0:
                     st.success(f"✅ {success_count} Listings erfolgreich gespeichert!")
+                if skipped_count > 0:
+                    st.info(f"⏭️ {skipped_count} Listings übersprungen (bereits vorhanden - gleiche ASIN + MP Kombination)")
                 if error_count > 0:
                     st.warning(f"⚠️ {error_count} Listings konnten nicht gespeichert werden (fehlende ASIN/MP)")
         else:
