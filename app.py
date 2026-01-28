@@ -2746,64 +2746,79 @@ def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
             keywords_input = st.text_area("Keywords (Komma oder Zeilenumbruch)", value=keywords_raw, key=f"kw_input_{key_suffix}")
             keywords = [kw.strip() for kw in re.split(r"[,\n]", keywords_input) if kw.strip()]
             
-            # Kommentare-Bereich
+            # Kommentare-Bereich (mehrere Kommentare)
             st.markdown("---")
             st.markdown("### 💬 Kommentare")
-            comments_key = f"comments_{key_suffix}"
-            show_comments_key = f"show_comments_{key_suffix}"
-            default_comments = str(row.get("comments", "")).strip() if row.get("comments") else ""
+            comments_list_key = f"comments_list_{key_suffix}"
             
-            # Initialisiere Kommentar-State
-            if comments_key not in st.session_state:
-                st.session_state[comments_key] = default_comments
+            # Lade Kommentare aus row (kann JSON-String oder einfacher Text sein)
+            default_comments_raw = row.get("comments", "") or ""
             
-            # Prüfe ob Kommentare vorhanden sind (nicht leer)
-            has_comments_content = bool(st.session_state[comments_key] and st.session_state[comments_key].strip())
+            # Initialisiere Kommentar-Liste
+            if comments_list_key not in st.session_state:
+                comments_list = []
+                if default_comments_raw:
+                    try:
+                        # Versuche als JSON zu parsen
+                        if default_comments_raw.strip().startswith('['):
+                            comments_list = json.loads(default_comments_raw)
+                        else:
+                            # Falls einfacher Text, konvertiere zu Liste
+                            comments_list = [default_comments_raw] if default_comments_raw.strip() else []
+                    except (json.JSONDecodeError, TypeError):
+                        # Falls Parsing fehlschlägt, als einzelnes Element behandeln
+                        comments_list = [default_comments_raw] if default_comments_raw.strip() else []
+                st.session_state[comments_list_key] = comments_list
             
-            # Prüfe ob Kommentar-Feld angezeigt werden soll
-            # Wenn bereits Kommentare vorhanden sind, zeige das Feld immer an
-            # Wenn der show_comments Flag gesetzt ist, zeige das Feld auch an
-            if show_comments_key not in st.session_state:
-                st.session_state[show_comments_key] = has_comments_content
+            # Hole aktuelle Kommentar-Liste
+            comments_list = st.session_state[comments_list_key]
             
-            # Wenn Kommentare vorhanden sind, setze Flag auf True
-            if has_comments_content:
-                st.session_state[show_comments_key] = True
-            
-            # Debug-Informationen (kann später entfernt werden)
+            # Debug-Informationen
             debug_comments = st.checkbox("🔍 Debug Kommentare", key=f"debug_comments_{key_suffix}", value=False)
             if debug_comments:
                 st.write(f"**Debug-Info:**")
-                st.write(f"- `comments_key`: `{comments_key}`")
-                st.write(f"- `show_comments_key`: `{show_comments_key}`")
-                st.write(f"- `has_comments_content`: `{has_comments_content}`")
-                st.write(f"- `show_comments_flag`: `{st.session_state.get(show_comments_key, 'NICHT_GESETZT')}`")
-                st.write(f"- `comments_value`: `{repr(st.session_state.get(comments_key, 'NICHT_GESETZT'))}`")
-                st.write(f"- `default_comments`: `{repr(default_comments)}`")
+                st.write(f"- `comments_list_key`: `{comments_list_key}`")
+                st.write(f"- `default_comments_raw`: `{repr(default_comments_raw)}`")
+                st.write(f"- `comments_list`: `{comments_list}`")
+                st.write(f"- `Anzahl Kommentare`: `{len(comments_list)}`")
             
-            # Button zum Hinzufügen/Entfernen von Kommentaren
-            if st.session_state[show_comments_key]:
-                # Kommentar-Feld anzeigen
-                comments_value = st.text_area(
-                    "Kommentare",
-                    value=st.session_state[comments_key],
-                    key=comments_key,
-                    height=150,
-                    help="Kommentare zu diesem Listing",
-                    on_change=_keep_open_expander
-                )
-                # Button zum Entfernen (nur wenn Kommentare vorhanden sind)
-                if has_comments_content:
-                    if st.button("🗑️ Kommentare entfernen", key=f"btn_remove_comments_{key_suffix}", use_container_width=True):
-                        st.session_state[comments_key] = ""
-                        st.session_state[show_comments_key] = False
-                        st.rerun()
-            else:
-                # Button zum Hinzufügen
-                if st.button("➕ Kommentare hinzufügen", key=f"btn_add_comments_{key_suffix}", use_container_width=True):
-                    st.session_state[comments_key] = ""
-                    st.session_state[show_comments_key] = True
-                    st.rerun()
+            # Zeige vorhandene Kommentare mit Entfernen-Button
+            if comments_list:
+                for idx, comment in enumerate(comments_list):
+                    comment_col1, comment_col2 = st.columns([4, 1])
+                    with comment_col1:
+                        comment_key = f"comment_{key_suffix}_{idx}"
+                        updated_comment = st.text_area(
+                            f"Kommentar {idx + 1}",
+                            value=str(comment) if comment else "",
+                            key=comment_key,
+                            height=80,
+                            help=f"Kommentar {idx + 1}",
+                            on_change=_keep_open_expander,
+                            label_visibility="visible"
+                        )
+                        # Aktualisiere Kommentar in Liste
+                        if idx < len(comments_list):
+                            comments_list[idx] = updated_comment.strip()
+                            st.session_state[comments_list_key] = comments_list
+                    with comment_col2:
+                        st.write("")  # Spacing
+                        st.write("")  # Spacing
+                        if st.button("🗑️", key=f"btn_remove_comment_{key_suffix}_{idx}", use_container_width=True, help="Kommentar entfernen"):
+                            # Entferne Kommentar aus Liste
+                            comments_list.pop(idx)
+                            st.session_state[comments_list_key] = comments_list
+                            st.rerun()
+            
+            # Button zum Hinzufügen eines neuen Kommentars
+            if st.button("➕ Neuen Kommentar hinzufügen", key=f"btn_add_comment_{key_suffix}", use_container_width=True):
+                comments_list.append("")
+                st.session_state[comments_list_key] = comments_list
+                st.rerun()
+            
+            # Wenn keine Kommentare vorhanden sind, zeige Info
+            if not comments_list:
+                st.info("💡 Klicke auf 'Neuen Kommentar hinzufügen', um einen Kommentar hinzuzufügen.")
 
         with col2:
             def render_field(field_name, limit):
@@ -2840,9 +2855,16 @@ def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
             listing_data["mp"] = st.session_state.get(f"mp_{key_suffix}", "")
             listing_data["account"] = st.session_state.get(f"account_{key_suffix}", "")
             listing_data["project"] = st.session_state.get(f"project_{key_suffix}", "")
-            # Kommentare hinzufügen
-            comments_value = st.session_state.get(comments_key, "").strip() if st.session_state.get(comments_key) else ""
-            listing_data["comments"] = comments_value if comments_value else None
+            # Kommentare hinzufügen (als JSON-Array)
+            comments_list_key = f"comments_list_{key_suffix}"
+            comments_list = st.session_state.get(comments_list_key, [])
+            # Filtere leere Kommentare heraus
+            comments_list_filtered = [c.strip() for c in comments_list if c and str(c).strip()]
+            # Konvertiere zu JSON-String oder None
+            if comments_list_filtered:
+                listing_data["comments"] = json.dumps(comments_list_filtered, ensure_ascii=False)
+            else:
+                listing_data["comments"] = None
 
         # Live-Keyword-Chips (links), basierend auf aktuellem Content
         all_text = " ".join(
