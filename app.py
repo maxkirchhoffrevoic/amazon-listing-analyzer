@@ -2750,20 +2750,39 @@ def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
             st.markdown("---")
             st.markdown("### 💬 Kommentare")
             comments_key = f"comments_{key_suffix}"
+            show_comments_key = f"show_comments_{key_suffix}"
             default_comments = str(row.get("comments", "")).strip() if row.get("comments") else ""
             
             # Initialisiere Kommentar-State
             if comments_key not in st.session_state:
                 st.session_state[comments_key] = default_comments
             
-            # Prüfe ob Kommentare vorhanden sind
-            has_comments = bool(st.session_state[comments_key] and st.session_state[comments_key].strip())
+            # Prüfe ob Kommentare vorhanden sind (nicht leer)
+            has_comments_content = bool(st.session_state[comments_key] and st.session_state[comments_key].strip())
+            
+            # Prüfe ob Kommentar-Feld angezeigt werden soll
+            # Wenn bereits Kommentare vorhanden sind, zeige das Feld immer an
+            # Wenn der show_comments Flag gesetzt ist, zeige das Feld auch an
+            if show_comments_key not in st.session_state:
+                st.session_state[show_comments_key] = has_comments_content
+            
+            # Wenn Kommentare vorhanden sind, setze Flag auf True
+            if has_comments_content:
+                st.session_state[show_comments_key] = True
+            
+            # Debug-Informationen (kann später entfernt werden)
+            debug_comments = st.checkbox("🔍 Debug Kommentare", key=f"debug_comments_{key_suffix}", value=False)
+            if debug_comments:
+                st.write(f"**Debug-Info:**")
+                st.write(f"- `comments_key`: `{comments_key}`")
+                st.write(f"- `show_comments_key`: `{show_comments_key}`")
+                st.write(f"- `has_comments_content`: `{has_comments_content}`")
+                st.write(f"- `show_comments_flag`: `{st.session_state.get(show_comments_key, 'NICHT_GESETZT')}`")
+                st.write(f"- `comments_value`: `{repr(st.session_state.get(comments_key, 'NICHT_GESETZT'))}`")
+                st.write(f"- `default_comments`: `{repr(default_comments)}`")
             
             # Button zum Hinzufügen/Entfernen von Kommentaren
-            if has_comments:
-                if st.button("🗑️ Kommentare entfernen", key=f"btn_remove_comments_{key_suffix}", use_container_width=True):
-                    st.session_state[comments_key] = ""
-                    st.rerun()
+            if st.session_state[show_comments_key]:
                 # Kommentar-Feld anzeigen
                 comments_value = st.text_area(
                     "Kommentare",
@@ -2773,20 +2792,18 @@ def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
                     help="Kommentare zu diesem Listing",
                     on_change=_keep_open_expander
                 )
+                # Button zum Entfernen (nur wenn Kommentare vorhanden sind)
+                if has_comments_content:
+                    if st.button("🗑️ Kommentare entfernen", key=f"btn_remove_comments_{key_suffix}", use_container_width=True):
+                        st.session_state[comments_key] = ""
+                        st.session_state[show_comments_key] = False
+                        st.rerun()
             else:
+                # Button zum Hinzufügen
                 if st.button("➕ Kommentare hinzufügen", key=f"btn_add_comments_{key_suffix}", use_container_width=True):
                     st.session_state[comments_key] = ""
+                    st.session_state[show_comments_key] = True
                     st.rerun()
-                # Verstecktes Feld für leere Kommentare (damit der Wert gespeichert wird)
-                st.text_area(
-                    "Kommentare",
-                    value="",
-                    key=comments_key,
-                    height=150,
-                    help="Kommentare zu diesem Listing",
-                    label_visibility="collapsed",
-                    disabled=True
-                )
 
         with col2:
             def render_field(field_name, limit):
