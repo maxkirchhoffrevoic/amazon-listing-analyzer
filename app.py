@@ -198,6 +198,10 @@ def save_listing_to_db(engine, listing_data, asin_ean_sku=None, mp=None, account
     if not engine:
         return False
     
+    # Cache invalidieren nach dem Speichern, damit neue Daten angezeigt werden
+    load_listings_from_db.clear()
+    get_distinct_values.clear()
+    
     # Prüfe ob Eintrag bereits existiert (basierend auf ASIN/EAN/SKU und MP)
     if asin_ean_sku and mp:
         check_sql = text("SELECT id FROM listings WHERE asin_ean_sku = :asin AND mp = :mp")
@@ -297,8 +301,9 @@ def save_listing_to_db(engine, listing_data, asin_ean_sku=None, mp=None, account
         st.error(f"Fehler beim Speichern: {e}")
         return False
 
+@st.cache_data(ttl=300, show_spinner=False)  # Cache für 5 Minuten
 def load_listings_from_db(engine, filters=None):
-    """Lädt Listings aus der Datenbank mit optionalen Filtern"""
+    """Lädt Listings aus der Datenbank mit optionalen Filtern (mit Caching)"""
     if not engine:
         return pd.DataFrame()
     
@@ -333,8 +338,9 @@ def load_listings_from_db(engine, filters=None):
         st.error(f"Fehler beim Laden: {e}")
         return pd.DataFrame()
 
+@st.cache_data(ttl=600, show_spinner=False)  # Cache für 10 Minuten (seltener ändern sich die Werte)
 def get_distinct_values(engine, column):
-    """Holt alle eindeutigen Werte einer Spalte für Filter-Dropdowns"""
+    """Holt alle eindeutigen Werte einer Spalte für Filter-Dropdowns (mit Caching)"""
     if not engine:
         return []
     
@@ -359,6 +365,8 @@ def batch_save_listings_to_db(engine, listings_data, batch_size=100):
     """
     if not engine:
         return 0, len(listings_data), 0, ["Keine Datenbankverbindung"]
+    
+    # Cache wird am Ende invalidiert, wenn erfolgreich gespeichert wurde
     
     success_count = 0
     error_count = 0
@@ -533,14 +541,13 @@ def create_example_excel_listings():
 
 def create_example_excel_ai_generation(db_engine=None):
     """Erstellt eine Beispiel-Excel-Datei für KI-Generierung mit Dropdown-Auswahlfeldern"""
-    # Lade verfügbare Brand Guidelines aus der Datenbank
+    # Lade verfügbare Brand Guidelines aus der Datenbank (mit Caching)
     brand_guidelines_options = ["-- Keine --"]
     if db_engine:
         try:
-            with db_engine.connect() as conn:
-                result = conn.execute(text("SELECT name FROM public.brand_guidelines ORDER BY name"))
-                guidelines = [row[0] for row in result.fetchall()]
-                brand_guidelines_options.extend(guidelines)
+            guidelines_list = get_brand_guidelines_list(db_engine)
+            guidelines = [g["name"] for g in guidelines_list]
+            brand_guidelines_options.extend(guidelines)
         except Exception:
             pass
     
@@ -628,8 +635,9 @@ def create_example_excel_ai_generation(db_engine=None):
     output.seek(0)
     return output
 
+@st.cache_data(ttl=600, show_spinner=False)  # Cache für 10 Minuten
 def load_brand_guidelines_by_name(db_engine, guideline_name):
-    """Lädt Brand Guidelines aus der Datenbank anhand des Namens"""
+    """Lädt Brand Guidelines aus der Datenbank anhand des Namens (mit Caching)"""
     if not db_engine or not guideline_name or guideline_name == "-- Keine --":
         return None
     
@@ -650,6 +658,20 @@ def load_brand_guidelines_by_name(db_engine, guideline_name):
     except Exception:
         pass
     return None
+
+@st.cache_data(ttl=600, show_spinner=False)  # Cache für 10 Minuten
+def get_brand_guidelines_list(db_engine):
+    """Holt die Liste aller Brand Guidelines für Dropdowns (mit Caching)"""
+    if not db_engine:
+        return []
+    
+    try:
+        with db_engine.connect() as conn:
+            result = conn.execute(text("SELECT id, name, customer_name FROM public.brand_guidelines ORDER BY updated_at DESC"))
+            rows = result.fetchall()
+            return [{"id": row[0], "name": row[1], "customer_name": row[2]} for row in rows]
+    except Exception:
+        return []
 
 def process_ai_generation_excel(uploaded_file, db_engine=None):
     """Verarbeitet eine hochgeladene Excel-Datei für KI-Generierung"""
@@ -1495,17 +1517,12 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                         import traceback
                         st.code(traceback.format_exc())
                 
-                # Verwende eine frische Connection für die Abfrage
-                # Explizit Schema angeben
+                # Verwende gecachte Funktion für bessere Performance
+                saved_guidelines = get_brand_guidelines_list(db_engine)
+                
                 if debug_mode:
                     st.write("- Versuche Abfrage mit explizitem Schema 'public'...")
-                
-                result = conn.execute(text("SELECT id, name, customer_name FROM public.brand_guidelines ORDER BY updated_at DESC"))
-                rows = result.fetchall()
-                saved_guidelines = [{"id": row[0], "name": row[1], "customer_name": row[2]} for row in rows]
-                
-                if debug_mode:
-                    st.write(f"- Anzahl Zeilen aus Abfrage: {len(rows)}")
+                    st.write(f"- Anzahl geladener Guidelines (aus Cache): {len(saved_guidelines)}")
                 
                 if debug_mode:
                     st.write(f"- Anzahl geladener Guidelines: {len(saved_guidelines)}")
@@ -1778,6 +1795,10 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                         "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
                                         "customer_feedback": st.session_state.get("input_customer_feedback", "")
                                     })
+                                    # Cache invalidieren, damit aktualisierte Guidelines sofort verfügbar sind
+                                    get_brand_guidelines_list.clear()
+                                    load_brand_guidelines_by_name.clear()
+                                    
                                     st.success(f"✅ Brand Guidelines '{guideline_name_value}' aktualisiert!")
                                     # Lösche die Editing-Flags
                                     del st.session_state["_editing_guideline_id"]
@@ -1807,6 +1828,10 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                         "forbidden_terms": st.session_state.get("input_forbidden_terms", ""),
                                         "customer_feedback": st.session_state.get("input_customer_feedback", "")
                                     })
+                                    # Cache invalidieren, damit aktualisierte Guidelines sofort verfügbar sind
+                                    get_brand_guidelines_list.clear()
+                                    load_brand_guidelines_by_name.clear()
+                                    
                                     st.success(f"✅ Brand Guidelines '{guideline_name_value}' aktualisiert!")
                                     st.rerun()
                                 else:
@@ -1824,6 +1849,10 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                     })
                                     # EXPLIZITER COMMIT - wichtig für Supabase Pooler
                                     conn.commit()
+                                    
+                                    # Cache invalidieren, damit neue Guidelines sofort verfügbar sind
+                                    get_brand_guidelines_list.clear()
+                                    load_brand_guidelines_by_name.clear()
                                     
                                     st.success(f"✅ Brand Guidelines '{guideline_name_value}' gespeichert!")
                                     if debug_mode:
