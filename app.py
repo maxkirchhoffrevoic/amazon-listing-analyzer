@@ -199,8 +199,8 @@ def save_listing_to_db(engine, listing_data, asin_ean_sku=None, mp=None, account
         return False
     
     # Cache invalidieren nach dem Speichern, damit neue Daten angezeigt werden
-    load_listings_from_db.clear()
-    get_distinct_values.clear()
+    load_listings_from_db_cached.clear()
+    get_distinct_values_cached.clear()
     
     # Prüfe ob Eintrag bereits existiert (basierend auf ASIN/EAN/SKU und MP)
     if asin_ean_sku and mp:
@@ -301,9 +301,28 @@ def save_listing_to_db(engine, listing_data, asin_ean_sku=None, mp=None, account
         st.error(f"Fehler beim Speichern: {e}")
         return False
 
+def _get_engine_identifier(engine):
+    """Erstellt einen hashbaren Identifier für die Engine (ohne Passwort)"""
+    if not engine:
+        return "no_engine"
+    try:
+        url_str = str(engine.url)
+        # Entferne Passwort aus URL für Identifier (sicherheitstechnisch unbedenklich, da nur für Cache-Key)
+        if "@" in url_str:
+            parts = url_str.split("@")
+            if len(parts) == 2:
+                # Entferne Passwort-Teil vor @
+                user_part = parts[0].split(":")[0] if ":" in parts[0] else parts[0]
+                return f"{user_part}@{parts[1]}"
+        return url_str
+    except Exception:
+        return "unknown_engine"
+
 @st.cache_data(ttl=300, show_spinner=False)  # Cache für 5 Minuten
-def load_listings_from_db(engine, filters=None):
+def load_listings_from_db_cached(engine_identifier, filters=None):
     """Lädt Listings aus der Datenbank mit optionalen Filtern (mit Caching)"""
+    # Hole Engine neu (wird innerhalb der Funktion verwendet)
+    engine = get_db_connection()
     if not engine:
         return pd.DataFrame()
     
@@ -338,9 +357,16 @@ def load_listings_from_db(engine, filters=None):
         st.error(f"Fehler beim Laden: {e}")
         return pd.DataFrame()
 
+def load_listings_from_db(engine, filters=None):
+    """Wrapper-Funktion für load_listings_from_db_cached mit Engine-Identifier"""
+    engine_id = _get_engine_identifier(engine)
+    return load_listings_from_db_cached(engine_id, filters)
+
 @st.cache_data(ttl=600, show_spinner=False)  # Cache für 10 Minuten (seltener ändern sich die Werte)
-def get_distinct_values(engine, column):
+def get_distinct_values_cached(engine_identifier, column):
     """Holt alle eindeutigen Werte einer Spalte für Filter-Dropdowns (mit Caching)"""
+    # Hole Engine neu (wird innerhalb der Funktion verwendet)
+    engine = get_db_connection()
     if not engine:
         return []
     
@@ -350,6 +376,11 @@ def get_distinct_values(engine, column):
             return [row[0] for row in result.fetchall()]
     except SQLAlchemyError:
         return []
+
+def get_distinct_values(engine, column):
+    """Wrapper-Funktion für get_distinct_values_cached mit Engine-Identifier"""
+    engine_id = _get_engine_identifier(engine)
+    return get_distinct_values_cached(engine_id, column)
 
 def batch_save_listings_to_db(engine, listings_data, batch_size=100):
     """
@@ -636,9 +667,14 @@ def create_example_excel_ai_generation(db_engine=None):
     return output
 
 @st.cache_data(ttl=600, show_spinner=False)  # Cache für 10 Minuten
-def load_brand_guidelines_by_name(db_engine, guideline_name):
+def load_brand_guidelines_by_name_cached(engine_identifier, guideline_name):
     """Lädt Brand Guidelines aus der Datenbank anhand des Namens (mit Caching)"""
-    if not db_engine or not guideline_name or guideline_name == "-- Keine --":
+    if not guideline_name or guideline_name == "-- Keine --":
+        return None
+    
+    # Hole Engine neu (wird innerhalb der Funktion verwendet)
+    db_engine = get_db_connection()
+    if not db_engine:
         return None
     
     try:
@@ -659,9 +695,16 @@ def load_brand_guidelines_by_name(db_engine, guideline_name):
         pass
     return None
 
+def load_brand_guidelines_by_name(db_engine, guideline_name):
+    """Wrapper-Funktion für load_brand_guidelines_by_name_cached mit Engine-Identifier"""
+    engine_id = _get_engine_identifier(db_engine)
+    return load_brand_guidelines_by_name_cached(engine_id, guideline_name)
+
 @st.cache_data(ttl=600, show_spinner=False)  # Cache für 10 Minuten
-def get_brand_guidelines_list(db_engine):
+def get_brand_guidelines_list_cached(engine_identifier):
     """Holt die Liste aller Brand Guidelines für Dropdowns (mit Caching)"""
+    # Hole Engine neu (wird innerhalb der Funktion verwendet)
+    db_engine = get_db_connection()
     if not db_engine:
         return []
     
@@ -672,6 +715,11 @@ def get_brand_guidelines_list(db_engine):
             return [{"id": row[0], "name": row[1], "customer_name": row[2]} for row in rows]
     except Exception:
         return []
+
+def get_brand_guidelines_list(db_engine):
+    """Wrapper-Funktion für get_brand_guidelines_list_cached mit Engine-Identifier"""
+    engine_id = _get_engine_identifier(db_engine)
+    return get_brand_guidelines_list_cached(engine_id)
 
 def process_ai_generation_excel(uploaded_file, db_engine=None):
     """Verarbeitet eine hochgeladene Excel-Datei für KI-Generierung"""
@@ -1796,8 +1844,8 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                         "customer_feedback": st.session_state.get("input_customer_feedback", "")
                                     })
                                     # Cache invalidieren, damit aktualisierte Guidelines sofort verfügbar sind
-                                    get_brand_guidelines_list.clear()
-                                    load_brand_guidelines_by_name.clear()
+                                    get_brand_guidelines_list_cached.clear()
+                                    load_brand_guidelines_by_name_cached.clear()
                                     
                                     st.success(f"✅ Brand Guidelines '{guideline_name_value}' aktualisiert!")
                                     # Lösche die Editing-Flags
@@ -1829,8 +1877,8 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                         "customer_feedback": st.session_state.get("input_customer_feedback", "")
                                     })
                                     # Cache invalidieren, damit aktualisierte Guidelines sofort verfügbar sind
-                                    get_brand_guidelines_list.clear()
-                                    load_brand_guidelines_by_name.clear()
+                                    get_brand_guidelines_list_cached.clear()
+                                    load_brand_guidelines_by_name_cached.clear()
                                     
                                     st.success(f"✅ Brand Guidelines '{guideline_name_value}' aktualisiert!")
                                     st.rerun()
@@ -1851,8 +1899,8 @@ with st.expander("🏢 Brand Guidelines & Formulierungen (optional)", expanded=F
                                     conn.commit()
                                     
                                     # Cache invalidieren, damit neue Guidelines sofort verfügbar sind
-                                    get_brand_guidelines_list.clear()
-                                    load_brand_guidelines_by_name.clear()
+                                    get_brand_guidelines_list_cached.clear()
+                                    load_brand_guidelines_by_name_cached.clear()
                                     
                                     st.success(f"✅ Brand Guidelines '{guideline_name_value}' gespeichert!")
                                     if debug_mode:
