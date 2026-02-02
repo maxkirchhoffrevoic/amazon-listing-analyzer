@@ -1939,33 +1939,43 @@ def _build_prompt(input_data: dict) -> str:
     
     user_context = "\n".join(context_parts) if context_parts else "Keine spezifischen Angaben"
     
-    # Prompt mit allen Richtlinien
-    return f"""
-Du bist Amazon Copywrighter und musst mir für nachfolgendes Produkt die Bullet Points, Description und Search Terms schreiben. Sprache des Listings ist deutsch.
+    # Neuer Prompt mit verbesserter Struktur
+    return f"""Du agierst als erfahrener Amazon Copywriter. Deine Aufgabe ist es, ein conversion-starkes und SEO-optimiertes Listing in deutscher Sprache zu erstellen. Du kombinierst die psychologische Verkaufsstruktur (Phase 1-3 deiner Guidelines) mit strikten Amazon-Compliance-Regeln.
 
-WICHTIGE RICHTLINIEN:
-- KEINE Garantieversprechen (keine Worte wie "perfekt", "garantiert", "ideal")
-- KEINE werbenden Formulierungen (keine Wirkversprechen, keine Preise, keine Rabatte, keine CTAs)
-- KEINE verbotenen Zeichen verwenden: !, $, ?, _, {{, }}, ^, ¬
-- KEINE Fremdmarken erwähnen
-- Bindestrich-Schreibweise nutzen!
-- Keyword Priorisierung: 1. Titel, 2. Search Terms, 3. Bulletpoints, 4. Description
+DEIN ARBEITSPROZESS:
 
-Hier ist der Aufbau der Felder:
+Analyse: Identifiziere aus den Produktinformationen die Zielgruppe, USPs und Kundenprobleme (basierend auf Phase 1).
 
-Titel: besteht aus 140-150 Zeichen, beginnt mit dem Produktnamen, danach die Key-Features und am Ende Dinge wie Farbe oder Stückzahl, falls vorhanden
+SEO-Strategie: Priorisiere Keywords (1. Titel, 2. Search Terms, 3. Bullets, 4. Description). Nutze die Bindestrich-Schreibweise für Komposita (z.B. "Leder-Gürtel").
 
-Bullet Points: Insgesamt fünf Stück, bestehen aus 190-200 Zeichen, starten mit jeweils zwei Worten in Versalien und einem Doppelpunkt. Sie enden jeweils ohne Punktuation. Achte darauf, dass die Bullet Points jeweils ein übergeordnetes Thema haben. Ebenso sollen sie nach dem Doppelpunkt aus einem kompletten deutschen Satz bestehen.
+Compliance-Check: Entferne Superlative (perfekt, ideal), Garantieversprechen und verbotene Sonderzeichen.
 
-Description: besteht aus 3 Absätzen mit jeweils einer kurzen Überschrift. Insgesamt hat diese 1600-1800 Zeichen.
+STRUKTURVORGABEN:
 
-Search Terms: haben insgesamt 220-250 Zeichen und stellen nur Keywords dar, vor allem die, die im vorherigen Content nicht genutzt wurden. Schreibe sie ohne Komma oder ähnliches hintereinander weg.
+Titel: 140-150 Zeichen. Aufbau: Markenname + Produktname + Key-Features + Farbe/Stückzahl. Keine Wortdopplungen. Die Features sollen mit Kommata getrennt werden.
+
+Bullet Points: 5 Stück, jeweils 190-200 Zeichen. Format: "GROSSGESCHRIEBENE BEGRIFFE: Vollständiger deutscher Satz ohne Punkt am Ende". Ein Thema pro Bullet.
+
+Description: 1600-1800 Zeichen, 3 Absätze mit kurzen Überschriften. Nutze ausschließlich Fließtext (kein HTML, außer es wird explizit für Zeilenumbrüche benötigt, bleibe hier aber primär bei reinem Text für das JSON). Fokus auf Storytelling und Nutzen.
+
+Search Terms: 220-250 Zeichen. Nur Keywords, die oben nicht vorkommen. Keine Kommas, nur Leerzeichen.
+
+STRIKTE VERBOTE (COMPLIANCE):
+
+KEINE Garantieversprechen oder Wirkversprechen.
+
+KEINE werblichen Floskeln (Rabatt, Preis, CTA, "Kaufen Sie jetzt").
+
+KEINE Superlative wie "perfekt", "garantiert", "ideal", "beste".
+
+KEINE Fremdmarken oder Markennamen Dritter.
+
+KEINE Sonderzeichen: !, $, ?, _, {{, }}, ^, ¬
 
 PRODUKTINFORMATIONEN:
-
 {user_context}
 
-Gib die Antwort **ausschließlich** als kompaktes JSON im folgenden Schema zurück:
+OUTPUT-FORMAT: Gib die Antwort ausschließlich als kompaktes JSON im folgenden Schema zurück:
 {{
   "Titel": "...",
   "Bullet1": "...",
@@ -1975,8 +1985,7 @@ Gib die Antwort **ausschließlich** als kompaktes JSON im folgenden Schema zurü
   "Bullet5": "...",
   "Description": "...",
   "SearchTerms": "..."
-}}
-""".strip()
+}}""".strip()
 
 # Session-Container für generierte Listings (damit Bearbeitung + Export wie beim Upload funktioniert)
 if "generated_rows" not in st.session_state:
