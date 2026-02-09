@@ -2070,7 +2070,7 @@ if "generated_rows" not in st.session_state:
 
 def _call_gemini_and_parse(prompt_text: str) -> dict:
     """
-    Ruft (optional) Google Gemini auf (Model: gemini-pro) und parst die JSON-Antwort.
+    Ruft (optional) Google Gemini auf (Model: gemini-1.5-pro) und parst die JSON-Antwort.
     Fällt beim Fehler auf {} zurück.
     """
     # Wenn Gemini SDK fehlt oder kein API-Key gesetzt ist, brechen wir sauber ab.
@@ -2093,7 +2093,7 @@ def _call_gemini_and_parse(prompt_text: str) -> dict:
             return {}
         
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-1.5-pro')
         
         # System-Prompt und User-Prompt kombinieren
         full_prompt = f"Du bist ein hilfreicher, präziser Assistent.\n\n{prompt_text}"
@@ -2111,7 +2111,7 @@ def _call_gemini_and_parse(prompt_text: str) -> dict:
         st.error(f"Generierung fehlgeschlagen: {e}")
         return {}
 
-if st.button("✨ Listing automatisch erstellen (Google Gemini – gemini-pro)"):
+if st.button("✨ Listing automatisch erstellen (Google Gemini – gemini-1.5-pro)"):
     # Sammle Metadaten (Pflichtfelder)
     asin_metadata = st.session_state.get("input_asin_metadata", "").strip()
     mp_metadata = st.session_state.get("input_mp_metadata", "").strip()
