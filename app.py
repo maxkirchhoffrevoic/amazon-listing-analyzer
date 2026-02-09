@@ -2068,9 +2068,48 @@ OUTPUT-FORMAT: Gib die Antwort ausschließlich als kompaktes JSON im folgenden S
 if "generated_rows" not in st.session_state:
     st.session_state["generated_rows"] = []
 
+def _get_available_gemini_model(api_key: str) -> str:
+    """
+    Prüft verfügbare Gemini-Modelle und gibt das erste verfügbare Modell zurück,
+    das generateContent unterstützt.
+    """
+    try:
+        genai.configure(api_key=api_key)
+        models = genai.list_models()
+        
+        # Priorisierte Liste von Modellen (von bevorzugt zu weniger bevorzugt)
+        preferred_models = [
+            'gemini-1.5-pro',
+            'gemini-1.5-flash',
+            'gemini-pro',
+            'gemini-1.0-pro',
+        ]
+        
+        # Erstelle eine Liste aller verfügbaren Modelle mit ihren unterstützten Methoden
+        available_models = {}
+        for model in models:
+            if 'generateContent' in model.supported_generation_methods:
+                model_name = model.name.replace('models/', '')
+                available_models[model_name] = model
+        
+        # Versuche zuerst die bevorzugten Modelle
+        for model_name in preferred_models:
+            if model_name in available_models:
+                return model_name
+        
+        # Falls kein bevorzugtes Modell verfügbar, nimm das erste verfügbare
+        if available_models:
+            return list(available_models.keys())[0]
+        
+        return None
+    except Exception as e:
+        st.warning(f"Fehler beim Abrufen der verfügbaren Modelle: {e}")
+        return None
+
 def _call_gemini_and_parse(prompt_text: str) -> dict:
     """
-    Ruft (optional) Google Gemini auf (Model: gemini-1.5-pro) und parst die JSON-Antwort.
+    Ruft (optional) Google Gemini auf und parst die JSON-Antwort.
+    Verwendet automatisch das erste verfügbare Modell, das generateContent unterstützt.
     Fällt beim Fehler auf {} zurück.
     """
     # Wenn Gemini SDK fehlt oder kein API-Key gesetzt ist, brechen wir sauber ab.
@@ -2093,7 +2132,19 @@ def _call_gemini_and_parse(prompt_text: str) -> dict:
             return {}
         
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-pro')
+        
+        # Finde verfügbares Modell
+        model_name = _get_available_gemini_model(api_key)
+        if not model_name:
+            st.error("Kein verfügbares Gemini-Modell gefunden, das generateContent unterstützt.")
+            return {}
+        
+        # Zeige verwendetes Modell an (nur beim ersten Aufruf, um Spam zu vermeiden)
+        if "gemini_model_used" not in st.session_state:
+            st.info(f"ℹ️ Verwende Gemini-Modell: {model_name}")
+            st.session_state["gemini_model_used"] = model_name
+        
+        model = genai.GenerativeModel(model_name)
         
         # System-Prompt und User-Prompt kombinieren
         full_prompt = f"Du bist ein hilfreicher, präziser Assistent.\n\n{prompt_text}"
@@ -2111,7 +2162,7 @@ def _call_gemini_and_parse(prompt_text: str) -> dict:
         st.error(f"Generierung fehlgeschlagen: {e}")
         return {}
 
-if st.button("✨ Listing automatisch erstellen (Google Gemini – gemini-1.5-pro)"):
+if st.button("✨ Listing automatisch erstellen (Google Gemini)"):
     # Sammle Metadaten (Pflichtfelder)
     asin_metadata = st.session_state.get("input_asin_metadata", "").strip()
     mp_metadata = st.session_state.get("input_mp_metadata", "").strip()
