@@ -9,13 +9,13 @@ from datetime import datetime
 from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.exc import SQLAlchemyError
 
-# Optional: OpenAI SDK
-# pip install openai
+# Optional: Google Gemini SDK
+# pip install google-generativeai
 try:
-    from openai import OpenAI
-    _HAS_OPENAI = True
+    import google.generativeai as genai
+    _HAS_GEMINI = True
 except Exception:
-    _HAS_OPENAI = False
+    _HAS_GEMINI = False
 
 # Database connection
 def get_db_connection():
@@ -810,7 +810,7 @@ def process_ai_generation_excel(uploaded_file, db_engine=None):
                 
                 # Generiere Listing mit KI
                 prompt = _build_prompt(input_data)
-                result = _call_openai_and_parse(prompt)
+                result = _call_gemini_and_parse(prompt)
                 
                 if result:
                     # Erstelle Listing-Datenstruktur
@@ -2068,26 +2068,39 @@ OUTPUT-FORMAT: Gib die Antwort ausschließlich als kompaktes JSON im folgenden S
 if "generated_rows" not in st.session_state:
     st.session_state["generated_rows"] = []
 
-def _call_openai_and_parse(prompt_text: str) -> dict:
+def _call_gemini_and_parse(prompt_text: str) -> dict:
     """
-    Ruft (optional) OpenAI auf (Model: gpt-5) und parst die JSON-Antwort.
+    Ruft (optional) Google Gemini auf (Model: gemini-pro) und parst die JSON-Antwort.
     Fällt beim Fehler auf {} zurück.
     """
-    # Wenn OpenAI SDK fehlt oder kein API-Key gesetzt ist, brechen wir sauber ab.
-    if not _HAS_OPENAI:
-        st.warning("OpenAI SDK nicht installiert. Installiere mit `pip install openai` und setze die Umgebungsvariable OPENAI_API_KEY.")
+    # Wenn Gemini SDK fehlt oder kein API-Key gesetzt ist, brechen wir sauber ab.
+    if not _HAS_GEMINI:
+        st.warning("Google Gemini SDK nicht installiert. Installiere mit `pip install google-generativeai` und setze die Umgebungsvariable GEMINI_API_KEY.")
         return {}
 
     try:
-        client = OpenAI()  # nutzt OPENAI_API_KEY aus Environment
-        resp = client.chat.completions.create(
-            model="gpt-5",  # vom Nutzer gewünschtes Modell
-            messages=[
-                {"role": "system", "content": "Du bist ein hilfreicher, präziser Assistent."},
-                {"role": "user", "content": prompt_text},
-            ]
-        )
-        text = resp.choices[0].message.content.strip()
+        # API-Key aus Environment oder Streamlit secrets holen
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            try:
+                if hasattr(st, 'secrets') and "gemini_api_key" in st.secrets:
+                    api_key = st.secrets["gemini_api_key"]
+            except Exception:
+                pass
+        
+        if not api_key:
+            st.error("GEMINI_API_KEY nicht gefunden. Bitte setze die Umgebungsvariable oder füge sie zu Streamlit secrets hinzu.")
+            return {}
+        
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-pro')
+        
+        # System-Prompt und User-Prompt kombinieren
+        full_prompt = f"Du bist ein hilfreicher, präziser Assistent.\n\n{prompt_text}"
+        
+        response = model.generate_content(full_prompt)
+        text = response.text.strip()
+        
         # JSON extrahieren
         m = re.search(r"\{.*\}", text, re.S)
         if not m:
@@ -2098,7 +2111,7 @@ def _call_openai_and_parse(prompt_text: str) -> dict:
         st.error(f"Generierung fehlgeschlagen: {e}")
         return {}
 
-if st.button("✨ Listing automatisch erstellen (ChatGPT – gpt-5)"):
+if st.button("✨ Listing automatisch erstellen (Google Gemini – gemini-pro)"):
     # Sammle Metadaten (Pflichtfelder)
     asin_metadata = st.session_state.get("input_asin_metadata", "").strip()
     mp_metadata = st.session_state.get("input_mp_metadata", "").strip()
@@ -2131,7 +2144,7 @@ if st.button("✨ Listing automatisch erstellen (ChatGPT – gpt-5)"):
         else:
             with st.spinner("🤖 Generiere Listing mit KI..."):
                 prompt = _build_prompt(input_data)
-                result = _call_openai_and_parse(prompt)
+                result = _call_gemini_and_parse(prompt)
             if result:
                 # Generiertes Listing in identisches Datenformat bringen
                 product_name_for_listing = input_data["product_name"].strip() or "Generiert aus Kontext"
