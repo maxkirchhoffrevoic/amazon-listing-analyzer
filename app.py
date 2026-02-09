@@ -2079,6 +2079,7 @@ def _get_available_gemini_model(api_key: str) -> str:
         
         # Priorisierte Liste von Modellen (von bevorzugt zu weniger bevorzugt)
         preferred_models = [
+            'gemini-1.5-pro-002',
             'gemini-1.5-pro',
             'gemini-1.5-flash',
             'gemini-pro',
