@@ -4,6 +4,6 @@ openpyxl
 xlsxwriter
 streamlit-quill
 openpyxl
-openai
+google-generativeai
 psycopg2-binary
 sqlalchemy
