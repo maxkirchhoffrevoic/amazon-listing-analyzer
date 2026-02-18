@@ -3765,3 +3765,99 @@ if updated_rows_all:
                     st.warning(f"⚠️ {error_count} Listings konnten nicht gespeichert werden (fehlende ASIN/MP)")
         else:
             st.info("💡 Datenbankverbindung nicht verfügbar. Setze SUPABASE_DB_PASSWORD Umgebungsvariable.")
+
+# Export-Button ganz unten
+st.markdown("---")
+st.markdown("### 📥 Amazon-Format Export")
+
+# Sammle alle Listings
+all_listings_for_export = []
+
+# Generierte Listings
+if st.session_state.get("generated_rows"):
+    all_listings_for_export.extend(st.session_state["generated_rows"])
+
+# Bearbeitete DB-Listings
+if st.session_state.get("db_listings_edited"):
+    for listing_id, edited_info in st.session_state["db_listings_edited"].items():
+        edited_data = edited_info["data"]
+        original_listing = edited_info["original"]
+        safe_listing_id_export = re.sub(r'[^a-zA-Z0-9_]', '_', str(listing_id))
+        mp_key_export = f"mp_{safe_listing_id_export}"
+        mp = st.session_state.get(mp_key_export, original_listing.get("mp", ""))
+        
+        combined_listing = edited_data.copy()
+        combined_listing["mp"] = mp
+        combined_listing["asin_ean_sku"] = original_listing.get("asin_ean_sku", "")
+        combined_listing["image"] = original_listing.get("image", "")
+        all_listings_for_export.append(combined_listing)
+
+# Bearbeitete Excel-Listings (updated_rows_all wird weiter oben definiert)
+# Prüfe ob updated_rows_all existiert und nicht leer ist
+if 'updated_rows_all' in locals() or 'updated_rows_all' in globals():
+    try:
+        if updated_rows_all:
+            all_listings_for_export.extend(updated_rows_all)
+    except (NameError, UnboundLocalError):
+        pass
+
+if all_listings_for_export:
+    export_data = []
+    for listing in all_listings_for_export:
+        export_row = {
+            "Marketplace": str(listing.get("mp", "")).strip(),
+            "ASIN": str(listing.get("asin_ean_sku", "")).strip(),
+            "Product Title": str(listing.get("Titel", "")).strip(),
+            "Product Description": str(listing.get("Description", "")).strip(),
+            "Bullet 1": str(listing.get("Bullet1", "")).strip(),
+            "Bullet 2": str(listing.get("Bullet2", "")).strip(),
+            "Bullet 3": str(listing.get("Bullet3", "")).strip(),
+            "Bullet 4": str(listing.get("Bullet4", "")).strip(),
+            "Bullet 5": str(listing.get("Bullet5", "")).strip(),
+            "Bullet 6": "",
+            "Bullet 7": "",
+            "Bullet 8": "",
+            "Bullet 9": "",
+            "Generic Keywords": str(listing.get("SearchTerms", "")).strip(),  # SearchTerms = Generic Keywords
+            "SKU": str(listing.get("asin_ean_sku", "")).strip(),  # SKU = ASIN
+            "Brand Story": "",
+            "Variation ASIN": "",
+            "image": str(listing.get("image", "")).strip() if listing.get("image") else "",
+            "image1": "",
+            "image2": "",
+            "image3": "",
+            "image4": "",
+            "image5": "",
+            "image6": "",
+            "image7": "",
+            "image8": "",
+            "image9": "",
+            "image10": "",
+            "image11": "",
+            "image12": "",
+            "image13": "",
+            "image14": "",
+            "Minimum Advertised Price": ""
+        }
+        export_data.append(export_row)
+    
+    if export_data:
+        export_df = pd.DataFrame(export_data)
+        output_amazon = BytesIO()
+        with pd.ExcelWriter(output_amazon, engine="openpyxl") as writer:
+            export_df.to_excel(writer, index=False, sheet_name="Amazon Export")
+        output_amazon.seek(0)
+        
+        st.download_button(
+            label="📥 Alle Listings im Amazon-Format herunterladen",
+            data=output_amazon,
+            file_name=f"amazon_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            use_container_width=True,
+            help="Exportiert alle aktuellen Listings (KI-generiert, bearbeitet, aus Excel) im Amazon-Format mit allen erforderlichen Spalten"
+        )
+    else:
+        st.info("ℹ️ Keine Listings zum Exportieren vorhanden.")
+else:
+    st.info("ℹ️ Keine Listings zum Exportieren vorhanden.")
