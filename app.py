@@ -3808,7 +3808,7 @@ if all_listings_for_export:
             "Marketplace": str(listing.get("mp", "")).strip(),
             "ASIN": str(listing.get("asin_ean_sku", "")).strip(),
             "Product Title": str(listing.get("Titel", "")).strip(),
-            "Product Description": str(listing.get("Description", "")).strip(),
+            "Description": str(listing.get("Description", "")).strip(),
             "Bullet 1": str(listing.get("Bullet1", "")).strip(),
             "Bullet 2": str(listing.get("Bullet2", "")).strip(),
             "Bullet 3": str(listing.get("Bullet3", "")).strip(),
