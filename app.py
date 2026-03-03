@@ -2436,6 +2436,13 @@ if db_engine:
                             st.session_state["db_listings_for_edit"] = []
                         
                         # Erstelle neues Listing-Objekt mit eindeutiger ID
+                        # Kommentare korrekt extrahieren (kann None, leerer String oder JSON-String sein)
+                        comments_value = selected_row.get("comments")
+                        if comments_value is None or (isinstance(comments_value, str) and not comments_value.strip()):
+                            comments_value = ""
+                        else:
+                            comments_value = str(comments_value)
+                        
                         new_listing = {
                             "id": str(uuid.uuid4()),  # Eindeutige ID für jedes Listing
                             "Product": selected_row.get("product", ""),
@@ -2448,6 +2455,7 @@ if db_engine:
                             "Description": selected_row.get("description", ""),
                             "SearchTerms": selected_row.get("search_terms", ""),
                             "Keywords": selected_row.get("keywords", ""),
+                            "comments": comments_value,  # Kommentare hinzufügen
                             "asin_ean_sku": selected_row.get("asin_ean_sku", ""),
                             "mp": selected_row.get("mp", ""),
                             "account": selected_row.get("account", ""),
@@ -2917,8 +2925,14 @@ def render_listing(row, i, has_product, listing_id=None, skip_expander=False):
             st.markdown("### 💬 Kommentare")
             comments_list_key = f"comments_list_{key_suffix}"
             
-            # Lade Kommentare aus row (kann JSON-String oder einfacher Text sein)
-            default_comments_raw = row.get("comments", "") or ""
+            # Lade Kommentare aus row (kann JSON-String, einfacher Text oder None sein)
+            default_comments_raw = row.get("comments")
+            if default_comments_raw is None:
+                default_comments_raw = ""
+            elif isinstance(default_comments_raw, str):
+                default_comments_raw = default_comments_raw.strip()
+            else:
+                default_comments_raw = str(default_comments_raw).strip()
             
             # Initialisiere Kommentar-Liste
             if comments_list_key not in st.session_state:
@@ -3404,6 +3418,14 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
             # Konvertiere zu Format für render_listing (ohne Metadaten)
             # Verwende den generierten listing_name als Product
             product_name = listing_name  # Verwende den bereits generierten Namen
+            
+            # Kommentare korrekt extrahieren (kann None, leerer String oder JSON-String sein)
+            comments_value = db_listing.get("comments")
+            if comments_value is None or (isinstance(comments_value, str) and not comments_value.strip()):
+                comments_value = ""
+            else:
+                comments_value = str(comments_value)
+            
             listing_for_render = {
                 "Product": product_name,
                 "Titel": db_listing.get("Titel", ""),
@@ -3417,7 +3439,7 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                 "Keywords": db_listing.get("Keywords", ""),
                 "asin_ean_sku": db_listing.get("asin_ean_sku", ""),  # Für Fallback in render_listing
                 "mp": mp,  # MP-Wert für render_listing (bereits mit "DE" als Standard gesetzt)
-                "comments": db_listing.get("comments", "") or ""  # Kommentare hinzufügen
+                "comments": comments_value  # Kommentare hinzufügen
             }
             
             # Render Listing mit eindeutigem Index basierend auf ID
