@@ -3547,8 +3547,16 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                             # Verwende geänderte Account und Project aus session_state, falls vorhanden
                             account_key = f"account_{safe_listing_id_for_save}"
                             project_key = f"project_{safe_listing_id_for_save}"
-                            account = st.session_state.get(account_key, original_listing.get("account", "")).strip() or None
-                            project = st.session_state.get(project_key, original_listing.get("project", "")).strip() or None
+                            # Account korrekt extrahieren (kann None sein)
+                            account_value = st.session_state.get(account_key)
+                            if account_value is None:
+                                account_value = original_listing.get("account", "")
+                            account = str(account_value).strip() if account_value else None
+                            # Project korrekt extrahieren (kann None sein)
+                            project_value = st.session_state.get(project_key)
+                            if project_value is None:
+                                project_value = original_listing.get("project", "")
+                            project = str(project_value).strip() if project_value else None
                             
                             if asin and mp:
                                 # Prüfe ob existiert und ob überschrieben werden soll
@@ -3732,8 +3740,11 @@ if updated_rows_all:
                         # Falls keine ASIN, verwende Product-Name
                         asin = str(listing_data.get("Product", "")).strip()
                     mp = str(listing_data.get("mp", "")).strip()
-                    account = str(listing_data.get("account", "")).strip() or None
-                    project = str(listing_data.get("project", "")).strip() or None
+                    # Account und Project korrekt extrahieren (kann None sein)
+                    account_value = listing_data.get("account", "")
+                    account = str(account_value).strip() if account_value else None
+                    project_value = listing_data.get("project", "")
+                    project = str(project_value).strip() if project_value else None
                     
                     if asin and mp:
                         # Prüfe ob Eintrag bereits in Datenbank existiert
