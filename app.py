@@ -211,8 +211,13 @@ def save_listing_to_db(engine, listing_data, asin_ean_sku=None, mp=None, account
         if result:
             # Update bestehender Eintrag
             # Kommentare: Wenn leer, setze auf NULL (lösche sie)
-            comments_value = listing_data.get("comments", "").strip() if listing_data.get("comments") else ""
-            comments_db = comments_value if comments_value else None
+            comments_raw = listing_data.get("comments")
+            if comments_raw:
+                # Konvertiere zu String und entferne Leerzeichen
+                comments_value = str(comments_raw).strip()
+                comments_db = comments_value if comments_value else None
+            else:
+                comments_db = None
             
             update_sql = text("""
                 UPDATE listings SET
@@ -259,8 +264,13 @@ def save_listing_to_db(engine, listing_data, asin_ean_sku=None, mp=None, account
     
     # Neuer Eintrag
     # Kommentare: Wenn leer, setze auf NULL
-    comments_value = listing_data.get("comments", "").strip() if listing_data.get("comments") else ""
-    comments_db = comments_value if comments_value else None
+    comments_raw = listing_data.get("comments")
+    if comments_raw:
+        # Konvertiere zu String und entferne Leerzeichen
+        comments_value = str(comments_raw).strip()
+        comments_db = comments_value if comments_value else None
+    else:
+        comments_db = None
     
     insert_sql = text("""
         INSERT INTO listings (
@@ -444,8 +454,13 @@ def batch_save_listings_to_db(engine, listings_data, batch_size=100):
                         listing_id = None
                     
                     # Kommentare: Wenn leer, setze auf NULL
-                    comments_value = listing_data.get("comments", "").strip() if listing_data.get("comments") else ""
-                    comments_db = comments_value if comments_value else None
+                    comments_raw = listing_data.get("comments")
+                    if comments_raw:
+                        # Konvertiere zu String und entferne Leerzeichen
+                        comments_value = str(comments_raw).strip()
+                        comments_db = comments_value if comments_value else None
+                    else:
+                        comments_db = None
                     
                     if listing_id:
                         # Update
@@ -3484,6 +3499,9 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                             edited_data = edited_info["data"]
                             original_listing = edited_info["original"]
                             
+                            # Erstelle sicheren Key (gleiche Logik wie oben)
+                            safe_listing_id_for_save = re.sub(r'[^a-zA-Z0-9_]', '_', str(listing_id))
+                            
                             listing_data = {
                                 "Product": edited_data.get("Product", ""),
                                 "Titel": edited_data.get("Titel", ""),
@@ -3495,17 +3513,20 @@ if "db_listings_for_edit" in st.session_state and len(st.session_state["db_listi
                                 "Description": edited_data.get("Description", ""),
                                 "SearchTerms": edited_data.get("SearchTerms", ""),
                                 "Keywords": edited_data.get("Keywords", ""),
+                                "comments": edited_data.get("comments"),  # Kommentare hinzufügen
+                                "image": original_listing.get("image"),  # Image aus Original
                                 "name": original_listing.get("name", "")
                             }
                             
                             asin = original_listing.get("asin_ean_sku", "")
                             # Verwende geändertes MP aus session_state, falls vorhanden
-                            # Erstelle sicheren Key (gleiche Logik wie oben)
-                            safe_listing_id_for_save = re.sub(r'[^a-zA-Z0-9_]', '_', str(listing_id))
                             mp_key = f"mp_{safe_listing_id_for_save}"
                             mp = st.session_state.get(mp_key, original_listing.get("mp", ""))
-                            account = original_listing.get("account") if original_listing.get("account") else None
-                            project = original_listing.get("project") if original_listing.get("project") else None
+                            # Verwende geänderte Account und Project aus session_state, falls vorhanden
+                            account_key = f"account_{safe_listing_id_for_save}"
+                            project_key = f"project_{safe_listing_id_for_save}"
+                            account = st.session_state.get(account_key, original_listing.get("account", "")).strip() or None
+                            project = st.session_state.get(project_key, original_listing.get("project", "")).strip() or None
                             
                             if asin and mp:
                                 # Prüfe ob existiert und ob überschrieben werden soll
@@ -3747,7 +3768,8 @@ if updated_rows_all:
                             "Bullet5": str(listing_data.get("Bullet5", "")),
                             "Description": str(listing_data.get("Description", "")),
                             "SearchTerms": str(listing_data.get("SearchTerms", "")),
-                            "Keywords": str(listing_data.get("Keywords", ""))
+                            "Keywords": str(listing_data.get("Keywords", "")),
+                            "comments": listing_data.get("comments")  # Kommentare hinzufügen
                         }
                         
                         if save_listing_to_db(db_engine, listing_data_for_db, final_asin, mp, account, project):
